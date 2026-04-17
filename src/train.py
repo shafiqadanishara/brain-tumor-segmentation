@@ -114,8 +114,8 @@ def main(args):
     channels = MODALITY_CHANNELS[args.modality]
 
     # Dataset
-    train_dataset = BraTSDataset3D("/content/drive/MyDrive/Skripsi/splits/train")
-    val_dataset   = BraTSDataset3D("/content/drive/MyDrive/Skripsi/splits/val")
+    train_dataset = BraTSDataset3D("/content/drive/MyDrive/Skripsi/split/train")
+    val_dataset   = BraTSDataset3D("/content/drive/MyDrive/Skripsi/split/val")
 
     train_loader = DataLoader(
         train_dataset,
