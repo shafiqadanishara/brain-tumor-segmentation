@@ -1,4 +1,5 @@
 import argparse
+from datetime import datetime
 import torch
 import torch.optim as optim
 import torch.nn.functional as F
@@ -9,7 +10,6 @@ from src.models.unet import UNet3D
 from src.losses.combinedLoss import bce_dice_loss
 
 from src.utils.csv_logger import save_history_csv
-
 from src.utils.metrics import (
     compute_metrics,
     accumulate_metrics,
@@ -36,16 +36,16 @@ from src.utils.plot import plot_all
 TARGET_SIZE = (128, 128, 128)
 
 MODALITY_CHANNELS = {
-    "t1"    :    [0],
-    "t1ce"  :    [1],
-    "t2"    :    [2],
-    "flair" :    [3],
+    "t1":    [0],
+    "t1ce":  [1],
+    "t2":    [2],
+    "flair": [3],
 }
 
 
-# --------------------------------------------------
+# ----------------------------------------
 # ONE EPOCH
-# --------------------------------------------------
+# ----------------------------------------
 def run_epoch(loader, model, optimizer, channels, device, training=True):
     model.train() if training else model.eval()
 
@@ -60,10 +60,8 @@ def run_epoch(loader, model, optimizer, channels, device, training=True):
             img = img.to(device, non_blocking=True)
             mask = mask.to(device, non_blocking=True)
 
-            # Select modality channel(s)
             img = img[:, channels, :, :, :]
 
-            # Safety resize
             if img.shape[2:] != TARGET_SIZE:
                 img = F.interpolate(
                     img,
@@ -92,7 +90,10 @@ def run_epoch(loader, model, optimizer, channels, device, training=True):
             total_loss += loss.item()
 
             batch_metrics = compute_metrics(logits.detach(), mask)
-            running_metrics = accumulate_metrics(running_metrics, batch_metrics)
+            running_metrics = accumulate_metrics(
+                running_metrics,
+                batch_metrics
+            )
 
             n_batches += 1
 
@@ -102,9 +103,9 @@ def run_epoch(loader, model, optimizer, channels, device, training=True):
     return avg_loss, avg_metrics
 
 
-# --------------------------------------------------
+# ----------------------------------------
 # MAIN
-# --------------------------------------------------
+# ----------------------------------------
 def main(args):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -149,12 +150,18 @@ def main(args):
         out_channels=3
     ).to(device)
 
-    optimizer = optim.Adam(model.parameters(), lr=args.lr)
+    optimizer = optim.Adam(
+        model.parameters(),
+        lr=args.lr
+    )
 
-    # Paths
-    save_path = f"/content/drive/MyDrive/Skripsi/checkpoints/model_{args.modality}.pth"
-    history_path = f"/content/drive/MyDrive/Skripsi/checkpoints/history_{args.modality}.json"
-    csv_path = f"/content/drive/MyDrive/Skripsi/checkpoints/history_{args.modality}.csv"
+    # Unique run ID
+    run_id = datetime.now().strftime("%m%d_%H%M")
+
+    # Save paths
+    save_path = f"/content/drive/MyDrive/Skripsi/checkpoints/model_{args.modality}_{run_id}.pth"
+    history_path = f"/content/drive/MyDrive/Skripsi/checkpoints/history_{args.modality}_{run_id}.json"
+    csv_path = f"/content/drive/MyDrive/Skripsi/checkpoints/history_{args.modality}_{run_id}.csv"
 
     # Utilities
     ckpt = Checkpoint(
@@ -165,8 +172,10 @@ def main(args):
 
     history = init_history(args.modality)
 
-    # Training Loop
+    # Training loop
     for epoch in range(args.epochs):
+        print(f"\nStarting Epoch {epoch + 1}/{args.epochs}")
+
         train_loss, train_m = run_epoch(
             train_loader,
             model,
@@ -185,7 +194,6 @@ def main(args):
             training=False
         )
 
-        # Console log
         log_epoch(
             epoch,
             args.epochs,
@@ -195,7 +203,6 @@ def main(args):
             val_m
         )
 
-        # Update history
         history = update_history(
             history,
             epoch,
@@ -205,11 +212,9 @@ def main(args):
             val_m
         )
 
-        # Save history
         save_history(history, history_path)
         save_history_csv(history, csv_path)
 
-        # Checkpoint / Early stopping
         improved, stop = ckpt.update(val_loss)
 
         log_checkpoint(
@@ -223,10 +228,8 @@ def main(args):
             log_early_stop(epoch)
             break
 
-    # Final plots
     plot_all(history_path)
 
-    # Final log
     log_done(
         ckpt.best,
         save_path,
@@ -241,14 +244,14 @@ if __name__ == "__main__":
         "--modality",
         type=str,
         required=True,
-        choices=["flair", "t1", "t1ce", "t2"]
+        choices=["t1", "t1ce", "t2", "flair"]
     )
 
     parser.add_argument("--epochs", type=int, default=40)
     parser.add_argument("--batch_size", type=int, default=4)
     parser.add_argument("--lr", type=float, default=1e-4)
     parser.add_argument("--patience", type=int, default=5)
-    parser.add_argument("--num_workers", type=int, default=4)
+    parser.add_argument("--num_workers", type=int, default=2)
 
     args = parser.parse_args()
     main(args)
