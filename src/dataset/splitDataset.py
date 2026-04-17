@@ -2,8 +2,8 @@ import os
 import shutil
 from sklearn.model_selection import train_test_split
 
-DATA_DIR = "data/raw/ASNR-MICCAI-BraTS2023-GLI-Challenge-TrainingData"
-OUTPUT_DIR = "data/split"
+DATA_DIR = "/content/drive/MyDrive/Skripsi/BraTS_Data"
+OUTPUT_DIR = "/content/drive/MyDrive/Skripsi/split"
 RANDOM_SEED = 42
 
 cases = sorted([
