@@ -6,7 +6,7 @@ from torch.utils.data import DataLoader
 
 from src.dataset.dataset3D import BraTSDataset3D
 from src.models.unet import UNet3D
-from src.losses import bce_dice_loss
+from src.losses.combinedLoss import bce_dice_loss
 
 from src.utils.csv_logger import save_history_csv
 
