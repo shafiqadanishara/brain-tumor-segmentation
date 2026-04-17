@@ -36,10 +36,10 @@ from src.utils.plot import plot_all
 TARGET_SIZE = (128, 128, 128)
 
 MODALITY_CHANNELS = {
-    "flair": [0],
-    "t1":    [1],
-    "t1ce":  [2],
-    "t2":    [3],
+    "t1"    :    [0],
+    "t1ce"  :    [1],
+    "t2"    :    [2],
+    "flair" :    [3],
 }
 
 
