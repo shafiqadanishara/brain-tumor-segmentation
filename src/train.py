@@ -114,8 +114,8 @@ def main(args):
     channels = MODALITY_CHANNELS[args.modality]
 
     # Dataset
-    train_dataset = BraTSDataset3D("data/split/train")
-    val_dataset   = BraTSDataset3D("data/split/val")
+    train_dataset = BraTSDataset3D("/content/drive/MyDrive/Skripsi/splits/train")
+    val_dataset   = BraTSDataset3D("/content/drive/MyDrive/Skripsi/splits/val")
 
     train_loader = DataLoader(
         train_dataset,
@@ -145,9 +145,9 @@ def main(args):
     optimizer = optim.Adam(model.parameters(), lr=args.lr)
 
     # Paths
-    save_path = f"model_{args.modality}.pth"
-    history_path = f"history_{args.modality}.json"
-    csv_path = f"history_{args.modality}.csv"
+    save_path = f"/content/drive/MyDrive/Skripsi/checkpoints/model_{args.modality}.pth"
+    history_path = f"/content/drive/MyDrive/Skripsi/checkpoints/history_{args.modality}.json"
+    csv_path = f"/content/drive/MyDrive/Skripsi/checkpoints/history_{args.modality}.csv"
 
     # Utilities
     ckpt = Checkpoint(
