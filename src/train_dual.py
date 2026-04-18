@@ -67,12 +67,10 @@ def run_epoch(loader, model, optimizer, channels, device, training=True):
 
     with context:
         for img, mask, _ in tqdm(
-                loader,
-                desc=phase,
-                leave=False,
-                ascii=True,
-                dynamic_ncols=True,
-                mininterval=1.0
+            loader,
+            desc=phase,
+            ncols=80,
+            ascii=True
         ):
             img = img.to(device, non_blocking=True)
             mask = mask.to(device, non_blocking=True)
