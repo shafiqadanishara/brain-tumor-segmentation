@@ -1,12 +1,8 @@
-# src/test_dual.py
-
 import argparse
 from pathlib import Path
 import numpy as np
 import pandas as pd
-import nibabel as nib
 import torch
-import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 import matplotlib.pyplot as plt
@@ -14,8 +10,7 @@ import matplotlib.pyplot as plt
 from src.dataset.dataset3D import BraTSDataset3D
 from src.models.unet import UNet3D
 from src.utils.metrics import compute_metrics
-
-TARGET_SIZE = (128, 128, 128)
+from src.dataset.postprocess import restore_to_original, save_nifti
 
 MODALITY_CHANNELS = {
     "t2_t1ce":    [2, 1],
@@ -27,58 +22,32 @@ MODALITY_CHANNELS = {
 }
 
 
-def save_nifti(arr, path):
-    nii = nib.Nifti1Image(arr.astype(np.float32), affine=np.eye(4))
-    nib.save(nii, str(path))
+def save_visual(path, pred):
+    z = pred.shape[-1] // 2
+    fig, ax = plt.subplots(1, 3, figsize=(12, 4))
 
-
-def save_visual(case_dir, img, gt, pred, names):
-    z = pred.shape[1] // 2
-
-    fig, ax = plt.subplots(2, 4, figsize=(18, 10))
-
-    ax[0,0].imshow(img[0,:,:,z], cmap="gray")
-    ax[0,0].set_title(names[0])
-
-    ax[0,1].imshow(img[1,:,:,z], cmap="gray")
-    ax[0,1].set_title(names[1])
-
-    ax[0,2].imshow(gt.max(axis=0)[:,:,z], cmap="viridis")
-    ax[0,2].set_title("GT")
-
-    ax[0,3].imshow(pred.max(axis=0)[:,:,z], cmap="viridis")
-    ax[0,3].set_title("Prediction")
-
-    labels = ["WT", "TC", "ET"]
-    cmaps = ["Greens", "Yellows", "Reds"]
+    titles = ["WT", "TC", "ET"]
+    cmaps = ["Reds", "Greens", "Blues"]
 
     for i in range(3):
-        ax[1,i].imshow(pred[i,:,:,z], cmap=cmaps[i])
-        ax[1,i].set_title(labels[i])
-
-    ax[1,3].axis("off")
-
-    for a in ax.ravel():
-        a.axis("off")
+        ax[i].imshow(pred[i, :, :, z], cmap=cmaps[i])
+        ax[i].set_title(titles[i])
+        ax[i].axis("off")
 
     plt.tight_layout()
-    plt.savefig(case_dir / "comparison.png", dpi=200)
+    plt.savefig(path, dpi=200)
     plt.close()
 
 
 def main(args):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    channels = MODALITY_CHANNELS[args.modality]
 
-    dataset = BraTSDataset3D(f"data/split/{args.split}", augment=False)
-
-    loader = DataLoader(
-        dataset,
-        batch_size=1,
-        shuffle=False,
-        num_workers=args.num_workers,
-        pin_memory=torch.cuda.is_available()
+    dataset = BraTSDataset3D(
+        f"data/split/{args.split}",
+        augment=False
     )
+
+    loader = DataLoader(dataset, batch_size=1, shuffle=False)
 
     model = UNet3D(in_channels=2, out_channels=3).to(device)
     model.load_state_dict(torch.load(args.checkpoint, map_location=device))
@@ -88,21 +57,15 @@ def main(args):
     out_root.mkdir(parents=True, exist_ok=True)
 
     rows = []
+    channels = MODALITY_CHANNELS[args.modality]
 
     with torch.no_grad():
-        for idx, (img, mask) in enumerate(tqdm(loader, desc="Testing Dual")):
+        for idx, (img, mask, meta) in enumerate(tqdm(loader)):
             img = img.to(device)
             mask = mask.to(device)
 
-            img = img[:, channels]
-
-            if img.shape[2:] != TARGET_SIZE:
-                img = F.interpolate(img, TARGET_SIZE, mode="trilinear", align_corners=False)
-
-            if mask.shape[2:] != TARGET_SIZE:
-                mask = F.interpolate(mask, TARGET_SIZE, mode="nearest")
-
-            logits = model(img)
+            x = img[:, channels]
+            logits = model(x)
             pred = (torch.sigmoid(logits) > 0.5).float()
 
             metrics = compute_metrics(logits, mask)
@@ -110,34 +73,44 @@ def main(args):
             rows.append(metrics)
 
             pred_np = pred[0].cpu().numpy()
-            gt_np = mask[0].cpu().numpy()
-            img_np = img[0].cpu().numpy()
 
-            case_dir = out_root / f"case_{idx:03d}"
+            # metadata
+            affine = meta["affine"][0].numpy()
+            original_shape = meta["original_shape"][0].numpy().astype(int)
+            bbox = meta["bbox"][0].numpy().astype(int)
+            case = meta["case"][0]
+
+            # restore to original space
+            restored = restore_to_original(
+                pred_np,
+                original_shape,
+                bbox
+            )
+
+            case_dir = out_root / case
             case_dir.mkdir(parents=True, exist_ok=True)
 
-            # Save NPY
+            # save normalized
             np.save(case_dir / "pred_full.npy", pred_np)
-            np.save(case_dir / "pred_wt.npy", pred_np[0])
-            np.save(case_dir / "pred_tc.npy", pred_np[1])
-            np.save(case_dir / "pred_et.npy", pred_np[2])
 
-            # Save NIfTI
-            save_nifti(pred_np.transpose(1,2,3,0), case_dir / "pred_full.nii.gz")
-            save_nifti(pred_np[0], case_dir / "pred_wt.nii.gz")
-            save_nifti(pred_np[1], case_dir / "pred_tc.nii.gz")
-            save_nifti(pred_np[2], case_dir / "pred_et.nii.gz")
+            # save original-space
+            np.save(case_dir / "pred_full_original.npy", restored)
 
-            names = args.modality.split("_")
-            save_visual(case_dir, img_np, gt_np, pred_np, names)
+            save_nifti(
+                restored.transpose(1, 2, 3, 0),
+                affine,
+                case_dir / "pred_full_original.nii.gz"
+            )
+
+            save_nifti(restored[0], affine, case_dir / "pred_wt_original.nii.gz")
+            save_nifti(restored[1], affine, case_dir / "pred_tc_original.nii.gz")
+            save_nifti(restored[2], affine, case_dir / "pred_et_original.nii.gz")
+
+            save_visual(case_dir / "comparison.png", restored)
 
     df = pd.DataFrame(rows)
     df.to_csv(out_root / "metrics.csv", index=False)
-
-    mean_df = df.mean(numeric_only=True).to_frame(name="mean")
-    mean_df.to_csv(out_root / "metrics_mean.csv")
-
-    print(mean_df)
+    df.mean(numeric_only=True).to_csv(out_root / "metrics_mean.csv")
 
 
 if __name__ == "__main__":
@@ -145,7 +118,5 @@ if __name__ == "__main__":
     parser.add_argument("--split", required=True, choices=["train", "val", "test"])
     parser.add_argument("--modality", required=True, choices=list(MODALITY_CHANNELS.keys()))
     parser.add_argument("--checkpoint", required=True)
-    parser.add_argument("--num_workers", type=int, default=2)
-
     args = parser.parse_args()
     main(args)

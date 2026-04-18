@@ -58,7 +58,7 @@ def run_epoch(loader, model, optimizer, channels, device, training=True):
     phase = "Train" if training else "Val"
 
     with context:
-        for img, mask in tqdm(loader, desc=phase, leave=False):
+        for img, mask, _ in tqdm(loader, desc=phase, leave=False):
             img = img.to(device, non_blocking=True)
             mask = mask.to(device, non_blocking=True)
 

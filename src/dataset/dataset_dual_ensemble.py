@@ -22,7 +22,9 @@ class BraTSDualEnsembleDataset(Dataset):
         return len(self.base)
 
     def __getitem__(self, idx):
-        img, mask = self.base[idx]
+        # FIX: BraTSDataset3D returns (image, seg, meta) — 3 values, not 2.
+        # meta is not needed here so it is discarded with _.
+        img, mask, _ = self.base[idx]
 
         # img channel order:
         # 0=t1, 1=t1ce, 2=t2, 3=flair
