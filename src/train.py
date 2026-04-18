@@ -261,10 +261,10 @@ if __name__ == "__main__":
         choices=["t1", "t1ce", "t2", "flair"]
     )
 
-    parser.add_argument("--epochs", type=int, default=40)
+    parser.add_argument("--epochs", type=int, default=100)
     parser.add_argument("--batch_size", type=int, default=4)
     parser.add_argument("--lr", type=float, default=1e-4)
-    parser.add_argument("--patience", type=int, default=5)
+    parser.add_argument("--patience", type=int, default=10)
     parser.add_argument("--num_workers", type=int, default=2)
 
     args = parser.parse_args()
