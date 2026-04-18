@@ -4,6 +4,7 @@ import torch
 import torch.optim as optim
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
+from tqdm import tqdm
 
 from src.dataset.dataset3D import BraTSDataset3D
 from src.models.unet import UNet3D
@@ -55,8 +56,10 @@ def run_epoch(loader, model, optimizer, channels, device, training=True):
 
     context = torch.enable_grad() if training else torch.no_grad()
 
+    phase = "Train" if training else "Val"
+
     with context:
-        for img, mask in loader:
+        for img, mask in tqdm(loader, desc=phase, leave=False):
             img = img.to(device, non_blocking=True)
             mask = mask.to(device, non_blocking=True)
 
@@ -156,7 +159,7 @@ def main(args):
     )
 
     # Unique run ID
-    run_id = datetime.now().strftime("%m%d_%H%M")
+    run_id = datetime.now().strftime("%Y%m%d_%H%M%S")
 
     # Save paths
     save_path = f"/content/drive/MyDrive/Skripsi/checkpoints/model_{args.modality}_{run_id}.pth"
