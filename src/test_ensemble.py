@@ -63,8 +63,8 @@ def main(args):
             img = img.to(device)
             mask = mask.to(device)
 
-            x1 = img[:, [2, 1]]  # T2 + T1ce
-            x2 = img[:, [1, 3]]  # T1ce + Flair
+            x1 = img[:, [1, 3]]  # T1ce+ Flair
+            x2 = img[:, [2, 1]]  # T2 + T1ce
 
             logits = model(x1, x2)
             pred = (torch.sigmoid(logits) > 0.5).float()
