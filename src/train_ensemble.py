@@ -1,3 +1,5 @@
+# src/train_ensemble.py
+
 import argparse
 from datetime import datetime
 import torch
@@ -6,8 +8,10 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from src.dataset.dataset3D import BraTSDataset3D
 from src.models.unet import UNet3D
+from src.models.dual_ensemble import DualEnsemble
+from src.dataset.dataset_dual_ensemble import BraTSDualEnsembleDataset
+
 from src.losses.combinedLoss import bce_dice_loss
 
 from src.utils.csv_logger import save_history_csv
@@ -36,18 +40,8 @@ from src.utils.plot import plot_all
 
 TARGET_SIZE = (128, 128, 128)
 
-MODALITY_CHANNELS = {
-    "t1":    [0],
-    "t1ce":  [1],
-    "t2":    [2],
-    "flair": [3],
-}
 
-
-# ----------------------------------------
-# ONE EPOCH
-# ----------------------------------------
-def run_epoch(loader, model, optimizer, channels, device, training=True):
+def run_epoch(loader, model, optimizer, device, training=True):
     model.train() if training else model.eval()
 
     total_loss = 0.0
@@ -58,15 +52,22 @@ def run_epoch(loader, model, optimizer, channels, device, training=True):
     phase = "Train" if training else "Val"
 
     with context:
-        for img, mask in tqdm(loader, desc=phase, leave=False):
-            img = img.to(device, non_blocking=True)
+        for x1, x2, mask in tqdm(loader, desc=phase, leave=False):
+            x1 = x1.to(device, non_blocking=True)
+            x2 = x2.to(device, non_blocking=True)
             mask = mask.to(device, non_blocking=True)
 
-            img = img[:, channels, :, :, :]
+            if x1.shape[2:] != TARGET_SIZE:
+                x1 = F.interpolate(
+                    x1,
+                    size=TARGET_SIZE,
+                    mode="trilinear",
+                    align_corners=False
+                )
 
-            if img.shape[2:] != TARGET_SIZE:
-                img = F.interpolate(
-                    img,
+            if x2.shape[2:] != TARGET_SIZE:
+                x2 = F.interpolate(
+                    x2,
                     size=TARGET_SIZE,
                     mode="trilinear",
                     align_corners=False
@@ -82,7 +83,7 @@ def run_epoch(loader, model, optimizer, channels, device, training=True):
             if training:
                 optimizer.zero_grad()
 
-            logits = model(img)
+            logits = model(x1, x2)
             loss = bce_dice_loss(logits, mask)
 
             if training:
@@ -105,34 +106,31 @@ def run_epoch(loader, model, optimizer, channels, device, training=True):
     return avg_loss, avg_metrics
 
 
-# ----------------------------------------
-# MAIN
-# ----------------------------------------
 def main(args):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Device: {device}")
 
-    print(f"Device   : {device}")
-    print(f"Modality : {args.modality}")
-
-    channels = MODALITY_CHANNELS[args.modality]
-
-    # Dataset
-    train_dataset = BraTSDataset3D(
+    # -----------------------------
+    # DATASET
+    # -----------------------------
+    train_dataset = BraTSDualEnsembleDataset(
         "data/split/train",
         augment=True
     )
 
-    val_dataset = BraTSDataset3D(
+    val_dataset = BraTSDualEnsembleDataset(
         "data/split/val",
         augment=False
     )
+
+    pin = torch.cuda.is_available()
 
     train_loader = DataLoader(
         train_dataset,
         batch_size=args.batch_size,
         shuffle=True,
         num_workers=args.num_workers,
-        pin_memory=True
+        pin_memory=pin
     )
 
     val_loader = DataLoader(
@@ -140,32 +138,38 @@ def main(args):
         batch_size=args.batch_size,
         shuffle=False,
         num_workers=args.num_workers,
-        pin_memory=True
+        pin_memory=pin
     )
 
     print(f"Train cases: {len(train_dataset)}")
     print(f"Val cases  : {len(val_dataset)}")
 
-    # Model
-    model = UNet3D(
-        in_channels=len(channels),
-        out_channels=3
-    ).to(device)
+    # -----------------------------
+    # LOAD PRETRAINED DUAL MODELS
+    # -----------------------------
+    model_a = UNet3D(in_channels=2, out_channels=3).to(device)
+    model_b = UNet3D(in_channels=2, out_channels=3).to(device)
+
+    model_a.load_state_dict(torch.load(args.model_a, map_location=device))
+    model_b.load_state_dict(torch.load(args.model_b, map_location=device))
+
+    model = DualEnsemble(model_a, model_b, out_channels=3).to(device)
 
     optimizer = optim.Adam(
-        model.parameters(),
+        filter(lambda p: p.requires_grad, model.parameters()),
         lr=args.lr
     )
 
-    # Run ID for best model only
+    # -----------------------------
+    # PATHS
+    # -----------------------------
     run_id = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-    save_path = f"experiments/single/output/checkpoints/model_{args.modality}_{run_id}.pth"
-    history_path = f"experiments/single/output/history/history_{args.modality}.json"
-    csv_path = f"experiments/single/output/history/history_{args.modality}.csv"
-    resume_path = f"experiments/single/output/checkpoints/resume_{args.modality}_latest.pth"
+    save_path = f"experiments/ensemble/output/checkpoints/model_ensemble_{run_id}.pth"
+    history_path = f"experiments/ensemble/output/history/history_ensemble.json"
+    csv_path = f"experiments/ensemble/output/history/history_ensemble.csv"
+    resume_path = f"experiments/ensemble/output/checkpoints/resume_ensemble_latest.pth"
 
-    # Checkpoint manager
     ckpt = Checkpoint(
         model=model,
         save_path=save_path,
@@ -174,15 +178,16 @@ def main(args):
         resume_path=resume_path
     )
 
-    # Resume if exists
     start_epoch, loaded_history = ckpt.load_resume()
 
     if loaded_history is not None:
         history = loaded_history
     else:
-        history = init_history(args.modality)
+        history = init_history("ensemble")
 
-    # Training loop
+    # -----------------------------
+    # TRAIN LOOP
+    # -----------------------------
     for epoch in range(start_epoch, args.epochs):
         print(f"\nStarting Epoch {epoch + 1}/{args.epochs}")
 
@@ -190,7 +195,6 @@ def main(args):
             train_loader,
             model,
             optimizer,
-            channels,
             device,
             training=True
         )
@@ -199,7 +203,6 @@ def main(args):
             val_loader,
             model,
             optimizer,
-            channels,
             device,
             training=False
         )
@@ -225,10 +228,8 @@ def main(args):
         save_history(history, history_path)
         save_history_csv(history, csv_path)
 
-        # Save latest resume checkpoint every epoch
         ckpt.save_resume(epoch, history)
 
-        # Save best model
         improved, stop = ckpt.update(val_loss)
 
         log_checkpoint(
@@ -254,12 +255,11 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
-    parser.add_argument(
-        "--modality",
-        type=str,
-        required=True,
-        choices=["t1", "t1ce", "t2", "flair"]
-    )
+    parser.add_argument("--model_a", type=str, required=True,
+                        help="checkpoint for t1ce_flair")
+
+    parser.add_argument("--model_b", type=str, required=True,
+                        help="checkpoint for t2_t1ce")
 
     parser.add_argument("--epochs", type=int, default=100)
     parser.add_argument("--batch_size", type=int, default=4)

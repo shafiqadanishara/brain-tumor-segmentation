@@ -36,11 +36,18 @@ from src.utils.plot import plot_all
 
 TARGET_SIZE = (128, 128, 128)
 
+# ----------------------------------------
+# DUAL MODALITY CHANNELS
+# BraTS order:
+# 0=t1, 1=t1ce, 2=t2, 3=flair
+# ----------------------------------------
 MODALITY_CHANNELS = {
-    "t1":    [0],
-    "t1ce":  [1],
-    "t2":    [2],
-    "flair": [3],
+    "t2_t1ce":    [2, 1],
+    "t1ce_flair": [1, 3],
+    "t2_flair":   [2, 3],
+    "t1_t1ce":    [0, 1],
+    "t1_flair":   [0, 3],
+    "t1_t2":      [0, 2],
 }
 
 
@@ -62,6 +69,7 @@ def run_epoch(loader, model, optimizer, channels, device, training=True):
             img = img.to(device, non_blocking=True)
             mask = mask.to(device, non_blocking=True)
 
+            # Select dual modality channels
             img = img[:, channels, :, :, :]
 
             if img.shape[2:] != TARGET_SIZE:
@@ -127,12 +135,14 @@ def main(args):
         augment=False
     )
 
+    pin = torch.cuda.is_available()
+
     train_loader = DataLoader(
         train_dataset,
         batch_size=args.batch_size,
         shuffle=True,
         num_workers=args.num_workers,
-        pin_memory=True
+        pin_memory=pin
     )
 
     val_loader = DataLoader(
@@ -140,7 +150,7 @@ def main(args):
         batch_size=args.batch_size,
         shuffle=False,
         num_workers=args.num_workers,
-        pin_memory=True
+        pin_memory=pin
     )
 
     print(f"Train cases: {len(train_dataset)}")
@@ -148,7 +158,7 @@ def main(args):
 
     # Model
     model = UNet3D(
-        in_channels=len(channels),
+        in_channels=len(channels),   # now = 2
         out_channels=3
     ).to(device)
 
@@ -157,13 +167,12 @@ def main(args):
         lr=args.lr
     )
 
-    # Run ID for best model only
     run_id = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-    save_path = f"experiments/single/output/checkpoints/model_{args.modality}_{run_id}.pth"
-    history_path = f"experiments/single/output/history/history_{args.modality}.json"
-    csv_path = f"experiments/single/output/history/history_{args.modality}.csv"
-    resume_path = f"experiments/single/output/checkpoints/resume_{args.modality}_latest.pth"
+    save_path = f"experiments/dual/output/checkpoints/model_{args.modality}_{run_id}.pth"
+    history_path = f"experiments/dual/output/history/history_{args.modality}.json"
+    csv_path = f"experiments/dual/output/history/history_{args.modality}.csv"
+    resume_path = f"experiments/dual/output/checkpoints/resume_{args.modality}_latest.pth"
 
     # Checkpoint manager
     ckpt = Checkpoint(
@@ -225,7 +234,7 @@ def main(args):
         save_history(history, history_path)
         save_history_csv(history, csv_path)
 
-        # Save latest resume checkpoint every epoch
+        # Save latest checkpoint every epoch
         ckpt.save_resume(epoch, history)
 
         # Save best model
@@ -258,7 +267,14 @@ if __name__ == "__main__":
         "--modality",
         type=str,
         required=True,
-        choices=["t1", "t1ce", "t2", "flair"]
+        choices=[
+            "t2_t1ce",
+            "t1ce_flair",
+            "t2_flair",
+            "t1_t1ce",
+            "t1_flair",
+            "t1_t2"
+        ]
     )
 
     parser.add_argument("--epochs", type=int, default=100)
