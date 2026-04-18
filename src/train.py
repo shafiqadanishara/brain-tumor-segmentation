@@ -55,7 +55,6 @@ def run_epoch(loader, model, optimizer, channels, device, training=True):
     n_batches = 0
 
     context = torch.enable_grad() if training else torch.no_grad()
-
     phase = "Train" if training else "Val"
 
     with context:
@@ -158,25 +157,33 @@ def main(args):
         lr=args.lr
     )
 
-    # Unique run ID
+    # Run ID for best model only
     run_id = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-    # Save paths
     save_path = f"/content/drive/MyDrive/Skripsi/checkpoints/model_{args.modality}_{run_id}.pth"
-    history_path = f"/content/drive/MyDrive/Skripsi/checkpoints/history_{args.modality}_{run_id}.json"
-    csv_path = f"/content/drive/MyDrive/Skripsi/checkpoints/history_{args.modality}_{run_id}.csv"
+    history_path = f"/content/drive/MyDrive/Skripsi/checkpoints/history_{args.modality}.json"
+    csv_path = f"/content/drive/MyDrive/Skripsi/checkpoints/history_{args.modality}.csv"
+    resume_path = f"/content/drive/MyDrive/Skripsi/checkpoints/resume_{args.modality}_latest.pth"
 
-    # Utilities
+    # Checkpoint manager
     ckpt = Checkpoint(
         model=model,
         save_path=save_path,
-        patience=args.patience
+        patience=args.patience,
+        optimizer=optimizer,
+        resume_path=resume_path
     )
 
-    history = init_history(args.modality)
+    # Resume if exists
+    start_epoch, loaded_history = ckpt.load_resume()
+
+    if loaded_history is not None:
+        history = loaded_history
+    else:
+        history = init_history(args.modality)
 
     # Training loop
-    for epoch in range(args.epochs):
+    for epoch in range(start_epoch, args.epochs):
         print(f"\nStarting Epoch {epoch + 1}/{args.epochs}")
 
         train_loss, train_m = run_epoch(
@@ -218,6 +225,10 @@ def main(args):
         save_history(history, history_path)
         save_history_csv(history, csv_path)
 
+        # Save latest resume checkpoint every epoch
+        ckpt.save_resume(epoch, history)
+
+        # Save best model
         improved, stop = ckpt.update(val_loss)
 
         log_checkpoint(
