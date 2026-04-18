@@ -45,9 +45,10 @@ MODALITY_CHANNELS = {
     "t2_t1ce":    [2, 1],
     "t1ce_flair": [1, 3],
     "t2_flair":   [2, 3],
-    "t1_t1ce":    [0, 1],
-    "t1_flair":   [0, 3],
-    "t1_t2":      [0, 2],
+    "t1ce_t2_flair": [1,2,3]
+    # "t1_t1ce":    [0, 1],
+    # "t1_flair":   [0, 3],
+    # "t1_t2":      [0, 2],
 }
 
 
@@ -65,7 +66,14 @@ def run_epoch(loader, model, optimizer, channels, device, training=True):
     phase = "Train" if training else "Val"
 
     with context:
-        for img, mask, _ in tqdm(loader, desc=phase, leave=False):
+        for img, mask, _ in tqdm(
+                loader,
+                desc=phase,
+                leave=False,
+                ascii=True,
+                dynamic_ncols=True,
+                mininterval=1.0
+        ):
             img = img.to(device, non_blocking=True)
             mask = mask.to(device, non_blocking=True)
 
