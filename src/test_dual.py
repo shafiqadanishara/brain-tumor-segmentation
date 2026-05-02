@@ -22,9 +22,9 @@ MODALITY_CHANNELS = {
     "t2_t1ce":    [2, 1],
     "t1ce_flair": [1, 3],
     "t2_flair":   [2, 3],
-    "t1_t1ce":    [0, 1],
-    "t1_flair":   [0, 3],
-    "t1_t2":      [0, 2],
+    # "t1_t1ce":    [0, 1],
+    # "t1_flair":   [0, 3],
+    # "t1_t2":      [0, 2],
 }
 
 
