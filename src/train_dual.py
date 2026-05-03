@@ -109,8 +109,8 @@ def train_fold(fold_idx, train_cases, val_cases, args, channels, device):
 
     # ---- Datasets ----
     # Full dataset (augment=True); Subset by case list
-    full_train = BraTSDataset3D("data/raw/ASNR-MICCAI-BraTS2023-GLI-Challenge-TrainingData", augment=True)
-    full_val   = BraTSDataset3D("data/raw/ASNR-MICCAI-BraTS2023-GLI-Challenge-TrainingData", augment=False)
+    full_train = BraTSDataset3D("data/raw", augment=True)
+    full_val   = BraTSDataset3D("data/raw", augment=False)
 
     # Map case names to indices
     all_cases = full_train.cases  # sorted list
