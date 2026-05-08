@@ -213,7 +213,31 @@ def main(args):
 
     fold_best_losses = []
 
+    # ==========================================
+    # AUTO-DETECT LATEST RESUME FOLD
+    # ==========================================
+
+    checkpoint_dir = "experiments/dual/output/checkpoints"
+
+    latest_fold = 0
+
+    for f in reversed(range(len(folds))):
+
+        resume_path = os.path.join(
+            checkpoint_dir,
+            f"resume_fold{f}_{args.modality}_latest.pth"
+        )
+
+        if os.path.exists(resume_path):
+            latest_fold = f
+            break
+
+    print(f"\nResuming from fold {latest_fold}")
+
     for fold in folds:
+
+        if fold["fold"] < latest_fold:
+            continue
         fold_idx    = fold["fold"]
         train_cases = fold["train"]
         val_cases   = fold["val"]
