@@ -21,23 +21,51 @@ def resize_mask(mask, target_shape):
     return (out > 0.5).astype(np.uint8)
 
 
-def restore_to_original(pred_chw, original_shape, bbox):
+def restore_to_original(pred_chw, original_t1):
     """
-    pred_chw: (3,D,H,W)
-    original_shape: (D,H,W)
-    bbox: (d0,d1,h0,h1,w0,w1)
+    pred_chw : (3,D,H,W) prediction in 128³ space
+    original_t1 : original T1 volume in (D,H,W)
 
     returns:
-        (3,D,H,W)
+        restored segmentation in original MRI space
     """
-    d0, d1, h0, h1, w0, w1 = bbox
-    crop_shape = (d1 - d0, h1 - h0, w1 - w0)
 
-    restored = np.zeros((3,) + tuple(original_shape), dtype=np.uint8)
+    # --------------------------------------
+    # Recompute SAME ROI crop as preprocessing
+    # --------------------------------------
+
+    mid = original_t1.shape[0] // 2
+    slice_img = original_t1[mid]
+
+    coords = np.where(slice_img > 0)
+
+    h1, h2 = coords[0].min(), coords[0].max() + 1
+    w1, w2 = coords[1].min(), coords[1].max() + 1
+
+    # crop shape used BEFORE resize
+    crop_shape = (
+        original_t1.shape[0],
+        h2 - h1,
+        w2 - w1
+    )
+
+    # --------------------------------------
+    # Restore
+    # --------------------------------------
+
+    restored = np.zeros(
+        (3,) + tuple(original_t1.shape),
+        dtype=np.uint8
+    )
 
     for c in range(3):
-        resized = resize_mask(pred_chw[c], crop_shape)
-        restored[c, d0:d1, h0:h1, w0:w1] = resized
+
+        resized = resize_mask(
+            pred_chw[c],
+            crop_shape
+        )
+
+        restored[c, :, h1:h2, w1:w2] = resized
 
     return restored
 

@@ -14,6 +14,8 @@ import torch
 from torch.utils.data import DataLoader, Subset
 from tqdm import tqdm
 import matplotlib.pyplot as plt
+import nibabel as nib
+import os
 
 from src.dataset.dataset3D import BraTSDataset3D
 from src.models.unet import UNet3D
@@ -173,6 +175,20 @@ def main(args):
 
             case = meta["case"][0]
 
+            case_path = os.path.join(
+                "data/raw/ASNR-MICCAI-BraTS2023-GLI-Challenge-TrainingData",
+                case
+            )
+
+            files = os.listdir(case_path)
+
+            t1_file = [f for f in files if "t1n" in f][0]
+
+            original_t1 = np.transpose(
+                nib.load(os.path.join(case_path, t1_file)).get_fdata(),
+                (2, 0, 1)
+            )
+
             # modality selection
             x = img[:, channels]
 
@@ -220,14 +236,12 @@ def main(args):
 
             restored = restore_to_original(
                 pred_np,
-                original_shape,
-                bbox
+                original_t1
             )
 
             gt_restored = restore_to_original(
                 gt_np,
-                original_shape,
-                bbox
+                original_t1
             )
 
             # =========================
