@@ -61,6 +61,44 @@ def save_comparison(path, pred, gt):
     plt.savefig(path, dpi=200)
     plt.close()
 
+def save_full_comparison(path, pred, gt):
+    """
+    Full segmentation comparison:
+    Prediction vs Ground Truth
+    """
+
+    z = pred.shape[1] // 2
+
+    def make_rgb(x):
+
+        H, W = x.shape[2], x.shape[3]
+
+        rgb = np.zeros((H, W, 3), dtype=np.float32)
+
+        rgb[x[0, z] > 0.5] = [0.0, 0.8, 0.0]  # WT green
+        rgb[x[1, z] > 0.5] = [0.0, 0.0, 1.0]  # TC blue
+        rgb[x[2, z] > 0.5] = [1.0, 0.0, 0.0]  # ET red
+
+        return rgb
+
+    pred_rgb = make_rgb(pred)
+    gt_rgb   = make_rgb(gt)
+
+    fig, axes = plt.subplots(1, 2, figsize=(10, 5))
+
+    axes[0].imshow(pred_rgb)
+    axes[0].set_title("Prediction")
+    axes[0].axis("off")
+
+    axes[1].imshow(gt_rgb)
+    axes[1].set_title("Ground Truth")
+    axes[1].axis("off")
+
+    plt.suptitle("Full Segmentation Comparison")
+
+    plt.tight_layout()
+    plt.savefig(path, dpi=200)
+    plt.close()
 
 def save_full_seg(path, pred):
     """
@@ -218,17 +256,17 @@ def main(args):
 
             affine = meta["affine"][0].numpy()
 
-            original_shape = (
-                meta["original_shape"][0]
-                .numpy()
-                .astype(int)
-            )
+            # original_shape = (
+            #     meta["original_shape"][0]
+            #     .numpy()
+            #     .astype(int)
+            # )
 
-            bbox = (
-                meta["bbox"][0]
-                .numpy()
-                .astype(int)
-            )
+            # bbox = (
+            #     meta["bbox"][0]
+            #     .numpy()
+            #     .astype(int)
+            # )
 
             # =========================
             # RESTORE TO ORIGINAL SPACE
@@ -266,6 +304,12 @@ def main(args):
                 pred_np
             )
 
+            save_full_comparison(
+                case_dir / "comparison_full_128.png",
+                pred_np,
+                gt_np
+            )
+
             save_single_region(
                 case_dir / "seg_et_128.png",
                 pred_np[2],
@@ -300,6 +344,12 @@ def main(args):
             save_full_seg(
                 case_dir / "seg_full_original.png",
                 restored
+            )
+
+            save_full_comparison(
+                case_dir / "comparison_full_original.png",
+                restored,
+                gt_restored
             )
 
             save_single_region(
