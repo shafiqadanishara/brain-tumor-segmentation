@@ -170,6 +170,17 @@ def train_fold(fold_idx, train_cases, val_cases, args, device):
     model_a.load_state_dict(torch.load(ckpt_a, map_location=device))
     model_b.load_state_dict(torch.load(ckpt_b, map_location=device))
 
+    # ----------------------------------------
+    # FREEZE PRETRAINED BACKBONES
+    # Following reference paper methodology
+    # ----------------------------------------
+
+    for param in model_a.parameters():
+        param.requires_grad = False
+
+    for param in model_b.parameters():
+        param.requires_grad = False
+
     model = DualEnsemble(model_a, model_b, out_channels=3).to(device)
 
     optimizer = optim.Adam(
