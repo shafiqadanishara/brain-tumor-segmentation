@@ -149,7 +149,11 @@ def main(args):
     # OUTPUT
     # =========================
 
-    out_root = Path(f"outputs/dual/test/{args.modality}")
+    fold_name = Path(args.checkpoint).stem
+
+    out_root = Path(
+        f"experiments/dual/output_test/{args.modality}/{fold_name}"
+    )
     out_root.mkdir(parents=True, exist_ok=True)
 
     rows = []
