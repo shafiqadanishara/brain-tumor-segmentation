@@ -2,13 +2,15 @@ import numpy as np
 from scipy.ndimage import map_coordinates, gaussian_filter, affine_transform
 
 
-def augment(image, seg):
+def augment(image, seg, elastic=True):
     """
     Full augmentation pipeline applied identically to image and mask.
 
     Args:
-        image : (C, D, H, W) float numpy array  — all 4 modality channels
-        seg   : (3, D, H, W) float numpy array  — binary WT, TC, ET channels
+        image   : (C, D, H, W) float numpy array  — all 4 modality channels
+        seg     : (3, D, H, W) float numpy array  — binary WT, TC, ET channels
+        elastic : bool — whether to apply elastic deformation (default True).
+                  Set False for ensemble training where backbones are frozen.
 
     Returns:
         image, seg — same shapes, augmented in-memory (originals on disk untouched)
@@ -16,7 +18,7 @@ def augment(image, seg):
     Steps:
         1. Random axis flips               — prob 0.5 per axis
         2. Rotation + per-axis scaling     — prob 0.3, scale range (0.65, 1.6)
-        3. Elastic deformation             — prob 0.3
+        3. Elastic deformation             — prob 0.3  (skipped if elastic=False)
         4. Additive brightness             — prob 0.3  (image only)
         5. Gamma augmentation (aggressive) — prob 0.5  (image only)
     """
@@ -64,7 +66,7 @@ def augment(image, seg):
         seg   = aug_seg
 
     # ---- 3. Elastic deformation (prob 0.3) ----
-    if np.random.rand() < 0.3:
+    if elastic and np.random.rand() < 0.3:
         C, D, H, W = image.shape
         sigma = 6.0    # smoothness of deformation field
         alpha = 80.0   # strength of deformation

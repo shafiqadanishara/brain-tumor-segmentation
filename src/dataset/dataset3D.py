@@ -20,9 +20,10 @@ class BraTSDataset3D(Dataset):
     BRATS_2018 = "2018"
     BRATS_2023 = "2023"
 
-    def __init__(self, root_dir, brats_version=None, augment=False):
+    def __init__(self, root_dir, brats_version=None, augment=False, elastic=True):
         self.root_dir = root_dir
-        self.augment = augment
+        self.augment  = augment
+        self.elastic  = elastic   # passed through to augment()
 
         self.cases = sorted([
             d for d in os.listdir(root_dir)
@@ -40,7 +41,8 @@ class BraTSDataset3D(Dataset):
         print(
             f"[BraTSDataset3D] {len(self.cases)} cases | "
             f"BraTS version: {self.brats_version} | "
-            f"Augment: {self.augment}"
+            f"Augment: {self.augment} | "
+            f"Elastic: {self.elastic if self.augment else 'N/A'}"
         )
 
     def _detect_version(self):
@@ -117,17 +119,17 @@ class BraTSDataset3D(Dataset):
             t1, t1ce, t2, flair, seg
         )
 
-        t1 = resize_3d(t1)
-        t1ce = resize_3d(t1ce)
-        t2 = resize_3d(t2)
+        t1    = resize_3d(t1)
+        t1ce  = resize_3d(t1ce)
+        t2    = resize_3d(t2)
         flair = resize_3d(flair)
-        seg = resize_3d(seg, order=0)
+        seg   = resize_3d(seg, order=0)
 
         seg = self.convert_to_regions(seg)
 
-        t1 = normalize(t1)
-        t1ce = normalize(t1ce)
-        t2 = normalize(t2)
+        t1    = normalize(t1)
+        t1ce  = normalize(t1ce)
+        t2    = normalize(t2)
         flair = normalize(flair)
 
         # image -> (C,D,H,W)
@@ -135,16 +137,16 @@ class BraTSDataset3D(Dataset):
 
         # seg already (3,D,H,W)
         if self.augment:
-            image, seg = augment(image, seg)
+            image, seg = augment(image, seg, elastic=self.elastic)
 
         image = torch.tensor(image, dtype=torch.float32)
-        seg = torch.tensor(seg, dtype=torch.float32)
+        seg   = torch.tensor(seg,   dtype=torch.float32)
 
         meta = {
-            "affine": affine.astype(np.float32),
-            "original_shape": original_shape.astype(np.int32),
-            "bbox": bbox.astype(np.int32),
-            "case": case
+            "affine":          affine.astype(np.float32),
+            "original_shape":  original_shape.astype(np.int32),
+            "bbox":            bbox.astype(np.int32),
+            "case":            case
         }
 
         return image, seg, meta
