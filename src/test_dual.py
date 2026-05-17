@@ -154,18 +154,22 @@ def save_summary(path, flair_vol, t1_vol, t1ce_vol, t2_vol, pred, gt):
     fig, axes = plt.subplots(
         n_rows,
         n_cols,
-        figsize=(3 * n_cols, 3 * n_rows),
+        figsize=(3.2 * n_cols, 3.2 * n_rows),
         facecolor="black"
     )
 
     if n_rows == 1:
         axes = np.expand_dims(axes, axis=0)
 
+    # ==================================================
+    # DRAW SLICES
+    # ==================================================
+
     for row, z in enumerate(slice_idxs):
 
-        # ==================================================
+        # ----------------------------------------------
         # MRI modalities
-        # ==================================================
+        # ----------------------------------------------
 
         for col, vol in enumerate(vols):
 
@@ -178,9 +182,9 @@ def save_summary(path, flair_vol, t1_vol, t1ce_vol, t2_vol, pred, gt):
 
             axes[row, col].axis("off")
 
-        # ==================================================
+        # ----------------------------------------------
         # Ground Truth overlay
-        # ==================================================
+        # ----------------------------------------------
 
         gt_overlay = build_overlay(
             flair_vol[z],
@@ -190,9 +194,9 @@ def save_summary(path, flair_vol, t1_vol, t1ce_vol, t2_vol, pred, gt):
         axes[row, 4].imshow(gt_overlay)
         axes[row, 4].axis("off")
 
-        # ==================================================
+        # ----------------------------------------------
         # Prediction overlay
-        # ==================================================
+        # ----------------------------------------------
 
         pred_overlay = build_overlay(
             flair_vol[z],
@@ -202,49 +206,57 @@ def save_summary(path, flair_vol, t1_vol, t1ce_vol, t2_vol, pred, gt):
         axes[row, 5].imshow(pred_overlay)
         axes[row, 5].axis("off")
 
-        # ==================================================
-        # Slice label
-        # ==================================================
+        # ----------------------------------------------
+        # Slice label on LEFT
+        # ----------------------------------------------
 
-        axes[row, 0].set_ylabel(
+        axes[row, 0].text(
+            -0.22,
+            0.5,
             f"Slice {z}",
-            color="white",
-            fontsize=12,
-            fontweight="bold",
+            transform=axes[row, 0].transAxes,
             rotation=90,
-            labelpad=12
+            va="center",
+            ha="center",
+            fontsize=14,
+            color="white",
+            fontweight="bold"
         )
 
     # ==================================================
-    # Column labels
+    # BOTTOM LABELS
     # ==================================================
 
     for col, label in enumerate(col_labels):
 
-        axes[-1, col].set_xlabel(
+        axes[-1, col].text(
+            0.5,
+            -0.14,
             label,
+            transform=axes[-1, col].transAxes,
+            ha="center",
+            va="top",
+            fontsize=16,
             color="white",
-            fontsize=13,
-            fontweight="bold",
-            labelpad=10
+            fontweight="bold"
         )
 
     # ==================================================
-    # Layout
+    # LAYOUT
     # ==================================================
 
     plt.subplots_adjust(
-        wspace=0.02,
-        hspace=0.02,
-        left=0.06,
-        right=0.98,
-        top=0.98,
-        bottom=0.08
+        wspace=0.01,
+        hspace=0.01,
+        left=0.08,
+        right=0.99,
+        top=0.99,
+        bottom=0.10
     )
 
     plt.savefig(
         path,
-        dpi=200,
+        dpi=220,
         facecolor="black",
         bbox_inches="tight"
     )
