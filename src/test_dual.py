@@ -536,26 +536,26 @@ def main(args):
                 gt_np
             )
 
-            save_single_region(
-                case_dir / "seg_wt_128.png",
-                pred_np[0],
-                "Predicted WT",
-                "Greens"
-            )
+            # save_single_region(
+            #     case_dir / "seg_wt_128.png",
+            #     pred_np[0],
+            #     "Predicted WT",
+            #     "Greens"
+            # )
 
-            save_single_region(
-                case_dir / "seg_tc_128.png",
-                pred_np[1],
-                "Predicted TC",
-                "Blues"
-            )
+            # save_single_region(
+            #     case_dir / "seg_tc_128.png",
+            #     pred_np[1],
+            #     "Predicted TC",
+            #     "Blues"
+            # )
 
-            save_single_region(
-                case_dir / "seg_et_128.png",
-                pred_np[2],
-                "Predicted ET",
-                "Reds"
-            )
+            # save_single_region(
+            #     case_dir / "seg_et_128.png",
+            #     pred_np[2],
+            #     "Predicted ET",
+            #     "Reds"
+            # )
 
             # ==================================================
             # ORIGINAL SPACE VISUALS
@@ -583,35 +583,35 @@ def main(args):
                 gt_restored
             )
 
-            save_single_region(
-                case_dir / "seg_wt_original.png",
-                restored[0],
-                "Predicted WT (original)",
-                "Greens"
-            )
+            # save_single_region(
+            #     case_dir / "seg_wt_original.png",
+            #     restored[0],
+            #     "Predicted WT (original)",
+            #     "Greens"
+            # )
 
-            save_single_region(
-                case_dir / "seg_tc_original.png",
-                restored[1],
-                "Predicted TC (original)",
-                "Blues"
-            )
+            # save_single_region(
+            #     case_dir / "seg_tc_original.png",
+            #     restored[1],
+            #     "Predicted TC (original)",
+            #     "Blues"
+            # )
 
-            save_single_region(
-                case_dir / "seg_et_original.png",
-                restored[2],
-                "Predicted ET (original)",
-                "Reds"
-            )
+            # save_single_region(
+            #     case_dir / "seg_et_original.png",
+            #     restored[2],
+            #     "Predicted ET (original)",
+            #     "Reds"
+            # )
 
             # ==================================================
             # RAW ARRAYS
             # ==================================================
 
             np.save(case_dir / "pred_full.npy", pred_np)
-            np.save(case_dir / "pred_wt.npy", pred_np[0])
-            np.save(case_dir / "pred_tc.npy", pred_np[1])
-            np.save(case_dir / "pred_et.npy", pred_np[2])
+            # np.save(case_dir / "pred_wt.npy", pred_np[0])
+            # np.save(case_dir / "pred_tc.npy", pred_np[1])
+            # np.save(case_dir / "pred_et.npy", pred_np[2])
 
             np.save(
                 case_dir / "pred_full_original.npy",
@@ -628,23 +628,23 @@ def main(args):
                 case_dir / "pred_full_original.nii.gz"
             )
 
-            save_nifti(
-                restored[0],
-                affine,
-                case_dir / "pred_wt_original.nii.gz"
-            )
+            # save_nifti(
+            #     restored[0],
+            #     affine,
+            #     case_dir / "pred_wt_original.nii.gz"
+            # )
 
-            save_nifti(
-                restored[1],
-                affine,
-                case_dir / "pred_tc_original.nii.gz"
-            )
+            # save_nifti(
+            #     restored[1],
+            #     affine,
+            #     case_dir / "pred_tc_original.nii.gz"
+            # )
 
-            save_nifti(
-                restored[2],
-                affine,
-                case_dir / "pred_et_original.nii.gz"
-            )
+            # save_nifti(
+            #     restored[2],
+            #     affine,
+            #     case_dir / "pred_et_original.nii.gz"
+            # )
 
     # ==================================================
     # METRICS
