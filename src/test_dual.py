@@ -49,8 +49,32 @@ def get_best_slice_single(vol):
     return int(np.argmax(vol.sum(axis=(1, 2))))
 
 
+def get_best_plane_slices(seg):
+    """
+    seg: (3, D, H, W)
+    Returns best slice index for each axis:
+        axial     → along D (axis 1): top-down view
+        coronal   → along H (axis 2): front-back view
+        sagittal  → along W (axis 3): left-right view
+    """
+    if seg.sum() == 0:
+        D, H, W = seg.shape[1], seg.shape[2], seg.shape[3]
+        return D // 2, H // 2, W // 2
+
+    axial    = int(np.argmax(seg.sum(axis=(0, 2, 3))))  # best D
+    coronal  = int(np.argmax(seg.sum(axis=(0, 1, 3))))  # best H
+    sagittal = int(np.argmax(seg.sum(axis=(0, 1, 2))))  # best W
+
+    return axial, coronal, sagittal
+
+
+def norm_slice(x):
+    mn, mx = x.min(), x.max()
+    return (x - mn) / (mx - mn + 1e-8)
+
+
 # --------------------------------------------------
-# OVERLAY BUILDER (seg on MRI background)
+# OVERLAY BUILDER
 # --------------------------------------------------
 
 def build_overlay(mri_slice, seg_slice):
@@ -60,8 +84,7 @@ def build_overlay(mri_slice, seg_slice):
     Color: WT=green, TC=yellow, ET=red
     Returns: (H, W, 3) float [0,1]
     """
-    mri_min, mri_max = mri_slice.min(), mri_slice.max()
-    mri_norm = (mri_slice - mri_min) / (mri_max - mri_min + 1e-8)
+    mri_norm = norm_slice(mri_slice)
     rgb = np.stack([mri_norm, mri_norm, mri_norm], axis=-1)
     rgb[seg_slice[0] > 0.5] = [0.0, 0.8, 0.0]   # WT green
     rgb[seg_slice[1] > 0.5] = [1.0, 1.0, 0.0]   # TC yellow
@@ -69,75 +92,105 @@ def build_overlay(mri_slice, seg_slice):
     return rgb
 
 
-LEGEND = [
-    Patch(facecolor='green',  label='WT'),
-    Patch(facecolor='yellow', label='TC'),
-    Patch(facecolor='red',    label='ET'),
-]
+def get_plane_slice(vol_3d, axis, idx):
+    """
+    Extract a 2D slice from a 3D volume along a given axis.
+
+    vol_3d : (D, H, W)
+    axis   : 0=axial(D), 1=coronal(H), 2=sagittal(W)
+    idx    : slice index
+
+    Returns: (H, W) 2D array, oriented consistently
+    """
+    if axis == 0:       # axial — slice along D → (H, W)
+        return vol_3d[idx, :, :]
+    elif axis == 1:     # coronal — slice along H → (D, W), flip for natural view
+        return vol_3d[:, idx, :]
+    else:               # sagittal — slice along W → (D, H), flip for natural view
+        return vol_3d[:, :, idx]
+
+
+def get_seg_plane_slice(seg_4d, axis, idx):
+    """
+    Extract a 2D seg slice from (3, D, H, W) along a given axis.
+    Returns: (3, H, W) 2D seg
+    """
+    if axis == 0:
+        return seg_4d[:, idx, :, :]
+    elif axis == 1:
+        return seg_4d[:, :, idx, :]
+    else:
+        return seg_4d[:, :, :, idx]
 
 
 # --------------------------------------------------
-# 1. SUMMARY — all sequences + GT + Pred WITH brain background
-#    Rows = slices, Cols = [Flair, T1, T1ce, T2, GT, Pred]
+# 1. SUMMARY — three-plane view
+#    Rows = [Axial, Coronal, Sagittal]
+#    Cols = [Flair, T1, T1ce, T2, GT, Pred]
+#    Column labels at bottom like reference, black background
 # --------------------------------------------------
 
-def save_summary(path, img_4ch, pred, gt, n_slices=4):
+def save_summary(path, flair_vol, t1_vol, t1ce_vol, t2_vol, pred, gt):
     """
-    img_4ch : (4, D, H, W) — [t1, t1ce, t2, flair]
-    pred    : (3, D, H, W)
-    gt      : (3, D, H, W)
-    """
-    best_z = get_best_slice(pred)
-    D      = pred.shape[1]
-    half   = n_slices // 2
-    start  = max(0, best_z - half)
-    end    = min(D, start + n_slices)
-    slices = list(range(start, end))
+    flair_vol, t1_vol, t1ce_vol, t2_vol : (D, H, W)
+    pred, gt : (3, D, H, W)
 
+    3 rows: Axial (D), Coronal (H), Sagittal (W)
+    6 cols: Flair, T1, T1ce, T2, Ground-truth, Prediction
+    """
+    axial_z, coronal_z, sagittal_z = get_best_plane_slices(pred)
+
+    planes     = [
+        (0, axial_z,    "Axial"),
+        (1, coronal_z,  "Coronal"),
+        (2, sagittal_z, "Sagittal"),
+    ]
+
+    n_rows = 3
     n_cols = 6
+
     fig, axes = plt.subplots(
-        len(slices), n_cols,
-        figsize=(3 * n_cols, 3 * len(slices)),
+        n_rows, n_cols,
+        figsize=(3 * n_cols, 3 * n_rows),
         facecolor="black"
     )
-    if len(slices) == 1:
-        axes = axes[np.newaxis, :]
 
-    col_titles = ["Flair", "T1", "T1ce", "T2", "Ground Truth", "Prediction"]
+    vols = [flair_vol, t1_vol, t1ce_vol, t2_vol]
 
-    def norm(x):
-        mn, mx = x.min(), x.max()
-        return (x - mn) / (mx - mn + 1e-8)
+    for row, (axis, idx, plane_name) in enumerate(planes):
 
-    for row, z in enumerate(slices):
-        flair = img_4ch[3, z]
-        t1    = img_4ch[0, z]
-        t1ce  = img_4ch[1, z]
-        t2    = img_4ch[2, z]
-
-        for col, seq in enumerate([flair, t1, t1ce, t2]):
-            axes[row, col].imshow(norm(seq), cmap="gray")
+        # MRI columns (0-3)
+        for col, vol in enumerate(vols):
+            slc = get_plane_slice(vol, axis, idx)
+            axes[row, col].imshow(norm_slice(slc), cmap="gray", aspect="auto")
             axes[row, col].axis("off")
-            if row == 0:
-                axes[row, col].set_title(col_titles[col], color="white", fontsize=10)
 
-        gt_rgb = build_overlay(flair, gt[:, z])
-        axes[row, 4].imshow(gt_rgb)
+        # GT overlay (col 4) — flair as background
+        flair_slc = get_plane_slice(flair_vol, axis, idx)
+        seg_slc   = get_seg_plane_slice(gt, axis, idx)
+        axes[row, 4].imshow(build_overlay(flair_slc, seg_slc), aspect="auto")
         axes[row, 4].axis("off")
-        if row == 0:
-            axes[row, 4].set_title(col_titles[4], color="white", fontsize=10)
 
-        pred_rgb = build_overlay(flair, pred[:, z])
-        axes[row, 5].imshow(pred_rgb)
+        # Pred overlay (col 5)
+        pred_slc = get_seg_plane_slice(pred, axis, idx)
+        axes[row, 5].imshow(build_overlay(flair_slc, pred_slc), aspect="auto")
         axes[row, 5].axis("off")
-        if row == 0:
-            axes[row, 5].set_title(col_titles[5], color="white", fontsize=10)
 
-    fig.legend(handles=LEGEND, loc='lower center', ncol=3,
-               fontsize=11, facecolor='black', labelcolor='white')
-    plt.suptitle("Summary", color="white", fontsize=13)
-    plt.tight_layout()
-    plt.savefig(path, dpi=200, facecolor="black")
+        # Plane label on the left of each row
+        axes[row, 0].set_ylabel(plane_name, color="white", fontsize=11,
+                                fontweight="bold", rotation=90,
+                                labelpad=8, va="center")
+
+    # Column labels at bottom like reference
+    col_labels = ["Flair", "T1", "T1ce", "T2", "Ground-truth", "Prediction"]
+    for col, label in enumerate(col_labels):
+        axes[-1, col].set_xlabel(label, color="white", fontsize=12,
+                                 labelpad=8, fontweight="bold")
+
+    plt.subplots_adjust(wspace=0.02, hspace=0.02,
+                        left=0.08, right=0.98,
+                        top=0.98, bottom=0.07)
+    plt.savefig(path, dpi=200, facecolor="black", bbox_inches="tight")
     plt.close()
 
 
@@ -148,17 +201,14 @@ def save_summary(path, img_4ch, pred, gt, n_slices=4):
 def save_comparison(path, pred, gt):
     """pred, gt: (3, D, H, W) — mask only"""
     z = get_best_slice(pred)
-
     regions = ["WT", "TC", "ET"]
     cmaps   = ["Greens", "Blues", "Reds"]
 
     fig, axes = plt.subplots(3, 2, figsize=(8, 12))
-
     for row, (name, cmap) in enumerate(zip(regions, cmaps)):
         axes[row, 0].imshow(pred[row, z], cmap=cmap, vmin=0, vmax=1)
         axes[row, 0].set_title(f"Pred {name}")
         axes[row, 0].axis("off")
-
         axes[row, 1].imshow(gt[row, z], cmap=cmap, vmin=0, vmax=1)
         axes[row, 1].set_title(f"GT {name}")
         axes[row, 1].axis("off")
@@ -180,16 +230,15 @@ def save_full_comparison(path, pred, gt):
 
     def make_rgb(seg):
         rgb = np.zeros((H, W, 3), dtype=np.float32)
-        rgb[seg[0, z] > 0.5] = [0.0, 0.8, 0.0]   # WT green
-        rgb[seg[1, z] > 0.5] = [1.0, 0.0, 0.0]   # TC red
-        rgb[seg[2, z] > 0.5] = [0.0, 0.0, 1.0]   # ET blue
+        rgb[seg[0, z] > 0.5] = [0.0, 0.8, 0.0]
+        rgb[seg[1, z] > 0.5] = [1.0, 0.0, 0.0]
+        rgb[seg[2, z] > 0.5] = [0.0, 0.0, 1.0]
         return rgb
 
     fig, axes = plt.subplots(1, 2, figsize=(10, 5))
     axes[0].imshow(make_rgb(pred))
     axes[0].set_title("Prediction")
     axes[0].axis("off")
-
     axes[1].imshow(make_rgb(gt))
     axes[1].set_title("Ground Truth")
     axes[1].axis("off")
@@ -262,15 +311,28 @@ def main(args):
                 "data/raw/ASNR-MICCAI-BraTS2023-GLI-Challenge-TrainingData",
                 case
             )
-            files   = os.listdir(case_path)
-            t1_file = [f for f in files if "t1n" in f][0]
+            files = os.listdir(case_path)
 
-            original_t1 = np.transpose(
-                nib.load(os.path.join(case_path, t1_file)).get_fdata(),
-                (2, 0, 1)
-            )
+            def load_mod(keyword):
+                f = [x for x in files if keyword in x][0]
+                return np.transpose(
+                    nib.load(os.path.join(case_path, f)).get_fdata(),
+                    (2, 0, 1)
+                )
 
-            img_4ch = img[0].cpu().numpy()   # (4, D, H, W)
+            orig_t1    = load_mod("t1n")
+            orig_t1ce  = load_mod("t1c")
+            orig_t2    = load_mod("t2w")
+            orig_flair = load_mod("t2f")
+            affine     = nib.load(
+                os.path.join(case_path, [x for x in files if "t1n" in x][0])
+            ).affine
+
+            # 128³ preprocessed channels — order: t1, t1ce, t2, flair
+            flair_128 = img[0, 3].cpu().numpy()
+            t1_128    = img[0, 0].cpu().numpy()
+            t1ce_128  = img[0, 1].cpu().numpy()
+            t2_128    = img[0, 2].cpu().numpy()
 
             x      = img[:, channels]
             logits = model(x)
@@ -282,10 +344,9 @@ def main(args):
 
             pred_np     = pred[0].cpu().numpy()
             gt_np       = mask[0].cpu().numpy()
-            affine      = meta["affine"][0].numpy()
 
-            restored    = restore_to_original(pred_np, original_t1)
-            gt_restored = restore_to_original(gt_np,   original_t1)
+            restored    = restore_to_original(pred_np, orig_t1)
+            gt_restored = restore_to_original(gt_np,   orig_t1)
 
             case_dir = out_root / case
             case_dir.mkdir(parents=True, exist_ok=True)
@@ -294,23 +355,18 @@ def main(args):
             # 128³ VISUALS
             # ==================================================
 
-            # Summary: all sequences + GT + Pred WITH brain
+            # Summary: 3-plane (axial, coronal, sagittal) × 6 cols
             save_summary(
                 case_dir / "summary_128.png",
-                img_4ch, pred_np, gt_np, n_slices=4
+                flair_128, t1_128, t1ce_128, t2_128,
+                pred_np, gt_np
             )
 
             # Per region: mask only
-            save_comparison(
-                case_dir / "comparison_pred_gt_128.png",
-                pred_np, gt_np
-            )
+            save_comparison(case_dir / "comparison_pred_gt_128.png", pred_np, gt_np)
 
             # Full GT vs Pred: mask only
-            save_full_comparison(
-                case_dir / "comparison_full_128.png",
-                pred_np, gt_np
-            )
+            save_full_comparison(case_dir / "comparison_full_128.png", pred_np, gt_np)
 
             # Single regions: mask only
             save_single_region(case_dir / "seg_wt_128.png", pred_np[0], "Predicted WT", "Greens")
@@ -321,21 +377,14 @@ def main(args):
             # ORIGINAL MRI SPACE VISUALS
             # ==================================================
 
-            # Summary original — use t1 as background for all 4 cols
-            orig_4ch = np.stack([original_t1] * 4, axis=0)
             save_summary(
                 case_dir / "summary_original.png",
-                orig_4ch, restored, gt_restored, n_slices=4
+                orig_flair, orig_t1, orig_t1ce, orig_t2,
+                restored, gt_restored
             )
 
-            save_comparison(
-                case_dir / "comparison_pred_gt_original.png",
-                restored, gt_restored
-            )
-            save_full_comparison(
-                case_dir / "comparison_full_original.png",
-                restored, gt_restored
-            )
+            save_comparison(case_dir / "comparison_pred_gt_original.png", restored, gt_restored)
+            save_full_comparison(case_dir / "comparison_full_original.png", restored, gt_restored)
             save_single_region(case_dir / "seg_wt_original.png", restored[0], "Predicted WT (original)", "Greens")
             save_single_region(case_dir / "seg_tc_original.png", restored[1], "Predicted TC (original)", "Blues")
             save_single_region(case_dir / "seg_et_original.png", restored[2], "Predicted ET (original)", "Reds")
