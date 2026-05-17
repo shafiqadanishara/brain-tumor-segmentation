@@ -454,20 +454,14 @@ def main(args):
             # RESTORE ORIGINAL SPACE
             # ==================================================
 
-            affine         = meta["affine"][0].numpy()
-            original_shape = meta["original_shape"][0].numpy().astype(int)
-            bbox           = meta["bbox"][0].numpy().astype(int)
-
             restored = restore_to_original(
                 pred_np,
-                original_shape,
-                bbox
+                orig_t1
             )
 
             gt_restored = restore_to_original(
                 gt_np,
-                original_shape,
-                bbox
+                orig_t1
             )
 
             case_dir = out_root / case
