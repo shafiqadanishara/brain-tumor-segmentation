@@ -112,7 +112,7 @@ def save_summary(path, flair_vol, t1_vol, t1ce_vol, t2_vol, pred, gt):
 def save_comparison(path, pred, gt):
     z       = get_best_slice(pred)
     regions = ["WT", "TC", "ET"]
-    cmaps   = ["Greens", "Yellows", "Reds"]
+    cmaps   = ["Greens", "YlOrBr", "Reds"]
     fig, axes = plt.subplots(3, 2, figsize=(8, 12))
     for row, (name, cmap) in enumerate(zip(regions, cmaps)):
         axes[row, 0].imshow(pred[row, z], cmap=cmap, vmin=0, vmax=1)
