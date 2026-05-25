@@ -220,7 +220,7 @@ def save_comparison(path, pred, gt):
     z = get_best_slice(pred)
 
     regions = ["WT", "TC", "ET"]
-    cmaps   = ["Greens", "Yellows", "Reds"]
+    cmaps   = ["Greens", "YlOrBr", "Reds"]
 
     fig, axes = plt.subplots(3, 2, figsize=(8, 12))
 

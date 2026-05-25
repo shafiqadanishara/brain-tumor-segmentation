@@ -2,10 +2,140 @@ import nibabel as nib
 import numpy as np
 import os
 
-print("\n=== UPenn GBM ===")
-segm_dir = 'data/UPENN_GBM/images_segm'
-seg_files = sorted(os.listdir(segm_dir))[:5]
-for f in seg_files:
-    seg = nib.load(os.path.join(segm_dir, f)).get_fdata()
-    counts = {int(v): int((seg==v).sum()) for v in np.unique(seg) if v > 0}
-    print(f'  {f}: {counts}')
+brats_root = 'data/raw/ASNR-MICCAI-BraTS2023-GLI-Challenge-TrainingData'
+upenn_root = 'data/UPENN_GBM/images_structural'
+
+def get_fingerprint(path):
+    vol = nib.load(path).get_fdata()
+    return (round(float(vol.mean()), 4),
+            round(float(vol.std()), 4),
+            vol.shape[0], vol.shape[1], vol.shape[2])
+
+print('Loading BraTS fingerprints...')
+brats_fp = {}
+for case in sorted(os.listdir(brats_root)):
+    files = [f for f in os.listdir(f'{brats_root}/{case}') if 't1n' in f]
+    if not files: continue
+    brats_fp[case] = get_fingerprint(f'{brats_root}/{case}/{files[0]}')
+
+print(f'BraTS: {len(brats_fp)} cases loaded')
+
+print('Loading UPenn fingerprints...')
+upenn_fp = {}
+for case in sorted(os.listdir(upenn_root)):
+    path = f'{upenn_root}/{case}/{case}_T1.nii.gz'
+    if not os.path.exists(path): continue
+    upenn_fp[case] = get_fingerprint(path)
+
+print(f'UPenn: {len(upenn_fp)} cases loaded')
+
+# Build lookup dict from UPenn fingerprints for O(n) matching
+upenn_lookup = {}
+for case, fp in upenn_fp.items():
+    upenn_lookup.setdefault(fp, []).append(case)
+
+matches = []
+for b_case, b_fp in brats_fp.items():
+    if b_fp in upenn_lookup:
+        for u_case in upenn_lookup[b_fp]:
+            matches.append((b_case, u_case))
+
+print(f'Total matches: {len(matches)}')
+for b, u in matches:
+    print(f'  BraTS: {b}  <-->  UPenn: {u}')
+
+
+#matching
+
+import os
+
+# The 274 confirmed contaminated UPenn cases from fingerprint matching
+contaminated = {
+    'UPENN-GBM-00395_11','UPENN-GBM-00530_11','UPENN-GBM-00599_11','UPENN-GBM-00267_11',
+    'UPENN-GBM-00458_11','UPENN-GBM-00535_11','UPENN-GBM-00579_11','UPENN-GBM-00456_11',
+    'UPENN-GBM-00549_11','UPENN-GBM-00520_11','UPENN-GBM-00447_11','UPENN-GBM-00538_11',
+    'UPENN-GBM-00455_11','UPENN-GBM-00581_11','UPENN-GBM-00534_11','UPENN-GBM-00569_11',
+    'UPENN-GBM-00414_11','UPENN-GBM-00554_11','UPENN-GBM-00523_11','UPENN-GBM-00528_11',
+    'UPENN-GBM-00563_11','UPENN-GBM-00470_11','UPENN-GBM-00435_11','UPENN-GBM-00445_11',
+    'UPENN-GBM-00399_11','UPENN-GBM-00460_11','UPENN-GBM-00546_11','UPENN-GBM-00498_11',
+    'UPENN-GBM-00452_11','UPENN-GBM-00602_11','UPENN-GBM-00406_11','UPENN-GBM-00421_11',
+    'UPENN-GBM-00516_11','UPENN-GBM-00570_11','UPENN-GBM-00500_11','UPENN-GBM-00480_11',
+    'UPENN-GBM-00387_11','UPENN-GBM-00508_11','UPENN-GBM-00432_11','UPENN-GBM-00425_11',
+    'UPENN-GBM-00562_11','UPENN-GBM-00246_11','UPENN-GBM-00409_11','UPENN-GBM-00403_11',
+    'UPENN-GBM-00469_11','UPENN-GBM-00471_11','UPENN-GBM-00426_11','UPENN-GBM-00502_11',
+    'UPENN-GBM-00552_11','UPENN-GBM-00574_11','UPENN-GBM-00609_11','UPENN-GBM-00588_11',
+    'UPENN-GBM-00434_11','UPENN-GBM-00316_11','UPENN-GBM-00310_11','UPENN-GBM-00411_11',
+    'UPENN-GBM-00504_11','UPENN-GBM-00547_11','UPENN-GBM-00605_11','UPENN-GBM-00578_11',
+    'UPENN-GBM-00527_11','UPENN-GBM-00482_11','UPENN-GBM-00594_11','UPENN-GBM-00572_11',
+    'UPENN-GBM-00576_11','UPENN-GBM-00532_11','UPENN-GBM-00608_11','UPENN-GBM-00522_11',
+    'UPENN-GBM-00401_11','UPENN-GBM-00475_11','UPENN-GBM-00461_11','UPENN-GBM-00410_11',
+    'UPENN-GBM-00244_11','UPENN-GBM-00584_11','UPENN-GBM-00494_11','UPENN-GBM-00506_11',
+    'UPENN-GBM-00412_11','UPENN-GBM-00145_11','UPENN-GBM-00590_11','UPENN-GBM-00385_11',
+    'UPENN-GBM-00540_11','UPENN-GBM-00568_11','UPENN-GBM-00423_11','UPENN-GBM-00553_11',
+    'UPENN-GBM-00490_11','UPENN-GBM-00556_11','UPENN-GBM-00479_11','UPENN-GBM-00525_11',
+    'UPENN-GBM-00587_11','UPENN-GBM-00481_11','UPENN-GBM-00606_11','UPENN-GBM-00483_11',
+    'UPENN-GBM-00416_11','UPENN-GBM-00592_11','UPENN-GBM-00352_11','UPENN-GBM-00488_11',
+    'UPENN-GBM-00457_11','UPENN-GBM-00551_11','UPENN-GBM-00408_11','UPENN-GBM-00476_11',
+    'UPENN-GBM-00446_11','UPENN-GBM-00379_11','UPENN-GBM-00486_11','UPENN-GBM-00598_11',
+    'UPENN-GBM-00537_11','UPENN-GBM-00260_11','UPENN-GBM-00529_11','UPENN-GBM-00034_11',
+    'UPENN-GBM-00392_11','UPENN-GBM-00514_11','UPENN-GBM-00559_11','UPENN-GBM-00557_11',
+    'UPENN-GBM-00095_11','UPENN-GBM-00555_11','UPENN-GBM-00128_11','UPENN-GBM-00521_11',
+    'UPENN-GBM-00499_11','UPENN-GBM-00517_11','UPENN-GBM-00449_11','UPENN-GBM-00436_11',
+    'UPENN-GBM-00462_11','UPENN-GBM-00132_11','UPENN-GBM-00512_11','UPENN-GBM-00302_11',
+    'UPENN-GBM-00473_11','UPENN-GBM-00487_11','UPENN-GBM-00133_11','UPENN-GBM-00596_11',
+    'UPENN-GBM-00370_11','UPENN-GBM-00593_11','UPENN-GBM-00454_11','UPENN-GBM-00518_11',
+    'UPENN-GBM-00129_11','UPENN-GBM-00597_11','UPENN-GBM-00586_11','UPENN-GBM-00287_11',
+    'UPENN-GBM-00515_11','UPENN-GBM-00350_11','UPENN-GBM-00453_11','UPENN-GBM-00282_11',
+    'UPENN-GBM-00369_11','UPENN-GBM-00359_11','UPENN-GBM-00583_11','UPENN-GBM-00378_11',
+    'UPENN-GBM-00531_11','UPENN-GBM-00463_11','UPENN-GBM-00595_11','UPENN-GBM-00607_11',
+    'UPENN-GBM-00544_11','UPENN-GBM-00448_11','UPENN-GBM-00381_11','UPENN-GBM-00585_11',
+    'UPENN-GBM-00413_11','UPENN-GBM-00580_11','UPENN-GBM-00304_11','UPENN-GBM-00484_11',
+    'UPENN-GBM-00492_11','UPENN-GBM-00150_11','UPENN-GBM-00539_11','UPENN-GBM-00464_11',
+    'UPENN-GBM-00564_11','UPENN-GBM-00566_11','UPENN-GBM-00567_11','UPENN-GBM-00336_11',
+    'UPENN-GBM-00565_11','UPENN-GBM-00263_11','UPENN-GBM-00001_11','UPENN-GBM-00012_11',
+    'UPENN-GBM-00045_11','UPENN-GBM-00047_11','UPENN-GBM-00057_11','UPENN-GBM-00058_11',
+    'UPENN-GBM-00063_11','UPENN-GBM-00064_11','UPENN-GBM-00065_11','UPENN-GBM-00068_11',
+    'UPENN-GBM-00072_11','UPENN-GBM-00077_11','UPENN-GBM-00078_11','UPENN-GBM-00081_11',
+    'UPENN-GBM-00087_11','UPENN-GBM-00125_11','UPENN-GBM-00126_11','UPENN-GBM-00152_11',
+    'UPENN-GBM-00161_11','UPENN-GBM-00162_11','UPENN-GBM-00167_11','UPENN-GBM-00169_11',
+    'UPENN-GBM-00171_11','UPENN-GBM-00175_11','UPENN-GBM-00177_11','UPENN-GBM-00183_11',
+    'UPENN-GBM-00185_11','UPENN-GBM-00187_11','UPENN-GBM-00190_11','UPENN-GBM-00191_11',
+    'UPENN-GBM-00194_11','UPENN-GBM-00195_11','UPENN-GBM-00198_11','UPENN-GBM-00199_11',
+    'UPENN-GBM-00203_11','UPENN-GBM-00204_11','UPENN-GBM-00207_11','UPENN-GBM-00210_11',
+    'UPENN-GBM-00213_11','UPENN-GBM-00216_11','UPENN-GBM-00219_11','UPENN-GBM-00220_11',
+    'UPENN-GBM-00224_11','UPENN-GBM-00225_11','UPENN-GBM-00232_11','UPENN-GBM-00234_11',
+    'UPENN-GBM-00235_11','UPENN-GBM-00236_11','UPENN-GBM-00237_11','UPENN-GBM-00243_11',
+    'UPENN-GBM-00248_11','UPENN-GBM-00250_11','UPENN-GBM-00258_11','UPENN-GBM-00265_11',
+    'UPENN-GBM-00268_11','UPENN-GBM-00271_11','UPENN-GBM-00273_11','UPENN-GBM-00281_11',
+    'UPENN-GBM-00286_11','UPENN-GBM-00289_11','UPENN-GBM-00291_11','UPENN-GBM-00293_11',
+    'UPENN-GBM-00295_11','UPENN-GBM-00296_11','UPENN-GBM-00297_11','UPENN-GBM-00298_11',
+    'UPENN-GBM-00300_11','UPENN-GBM-00301_11','UPENN-GBM-00308_11','UPENN-GBM-00309_11',
+    'UPENN-GBM-00311_11','UPENN-GBM-00313_11','UPENN-GBM-00315_11','UPENN-GBM-00318_11',
+    'UPENN-GBM-00319_11','UPENN-GBM-00321_11','UPENN-GBM-00323_11','UPENN-GBM-00324_11',
+    'UPENN-GBM-00327_11','UPENN-GBM-00328_11','UPENN-GBM-00332_11','UPENN-GBM-00333_11',
+    'UPENN-GBM-00334_11','UPENN-GBM-00338_11','UPENN-GBM-00340_11','UPENN-GBM-00341_11',
+    'UPENN-GBM-00345_11','UPENN-GBM-00346_11','UPENN-GBM-00347_11','UPENN-GBM-00348_11',
+    'UPENN-GBM-00374_11','UPENN-GBM-00377_11','UPENN-GBM-00386_11','UPENN-GBM-00417_11',
+    'UPENN-GBM-00451_11','UPENN-GBM-00468_11','UPENN-GBM-00472_11','UPENN-GBM-00491_11',
+    'UPENN-GBM-00501_11','UPENN-GBM-00503_11','UPENN-GBM-00561_11','UPENN-GBM-00130_11',
+    'UPENN-GBM-00165_11','UPENN-GBM-00247_11','UPENN-GBM-00303_11','UPENN-GBM-00305_11',
+    'UPENN-GBM-00331_11','UPENN-GBM-00337_11',
+}
+
+# Your 147 matched cases (have both structural + segm)
+struct_dir = 'data/UPENN_GBM/images_structural'
+segm_dir   = 'data/UPENN_GBM/images_segm'
+seg_cases  = set(f.replace('_segm.nii.gz','') for f in os.listdir(segm_dir))
+all_cases  = set(os.listdir(struct_dir))
+matched    = seg_cases & all_cases   # your 147 usable cases
+
+clean        = sorted(matched - contaminated)
+contaminated_in_matched = sorted(matched & contaminated)
+
+print(f'Your usable cases       : {len(matched)}')
+print(f'Contaminated (in BraTS) : {len(contaminated_in_matched)}')
+print(f'Clean (safe to use)     : {len(clean)}')
+print()
+print('Clean cases:')
+for c in clean:
+    print(f'  {c}')
