@@ -273,7 +273,7 @@ def save_comparison(path, pred, gt):
     z = get_best_slice(pred)
 
     regions = ["WT", "TC", "ET"]
-    cmaps   = ["Greens", "Blues", "Reds"]
+    cmaps   = ["Greens", "YlOrBr", "Reds"]
 
     fig, axes = plt.subplots(3, 2, figsize=(8, 12))
 
@@ -316,13 +316,11 @@ def save_full_comparison(path, pred, gt):
     H, W = pred.shape[2], pred.shape[3]
 
     def make_rgb(seg):
-
+        
         rgb = np.zeros((H, W, 3), dtype=np.float32)
-
-        rgb[seg[0, z] > 0.5] = [0.0, 0.8, 0.0]
-        rgb[seg[1, z] > 0.5] = [1.0, 0.0, 0.0]
-        rgb[seg[2, z] > 0.5] = [0.0, 0.0, 1.0]
-
+        rgb[seg[0, z] > 0.5] = [0.0, 0.8, 0.0]   # WT green
+        rgb[seg[1, z] > 0.5] = [1.0, 1.0, 0.0]   # TC yellow
+        rgb[seg[2, z] > 0.5] = [1.0, 0.0, 0.0]   # ET red
         return rgb
 
     fig, axes = plt.subplots(1, 2, figsize=(10, 5))
