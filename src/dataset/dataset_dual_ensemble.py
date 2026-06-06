@@ -14,16 +14,17 @@ class BraTSDualEnsembleDataset(Dataset):
         x2   = [t2,   t1ce]   — for branch B (t2_t1ce model)
         mask
 
-    Elastic deformation is disabled (elastic=False) because backbones
-    are frozen during ensemble training — elastic augmentation would
-    produce out-of-distribution feature maps from the frozen encoders.
+    Args:
+        elastic : bool — apakah elastic deformation diaktifkan.
+                  Default False karena backbone frozen saat ensemble training.
+                  Set True untuk eksperimen ablasi.
     """
 
-    def __init__(self, root_dir, augment=False):
+    def __init__(self, root_dir, augment=False, elastic=False):
         self.base = BraTSDataset3D(
             root_dir,
             augment=augment,
-            elastic=False   # disabled for ensemble training
+            elastic=elastic
         )
 
     def __len__(self):
