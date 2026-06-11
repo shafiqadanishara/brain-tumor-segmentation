@@ -41,6 +41,8 @@ MODALITY_CHANNELS = {
     "t2_t1ce":    [2, 1],
     "t1ce_flair": [1, 3],
     "t2_flair":   [2, 3],
+
+    "t1ce_t2_flair":[1, 2, 3]
     # "t1_t1ce":    [0, 1],
     # "t1_flair":   [0, 3],
     # "t1_t2":      [0, 2],
@@ -145,10 +147,15 @@ def train_fold(fold_idx, train_cases, val_cases, args, channels, device):
 
     # ---- Paths ----
     fold_tag    = f"fold{fold_idx}_{args.modality}"
-    save_path   = f"experiments/dual/output/checkpoints/best_{fold_tag}.pth"
-    history_path= f"experiments/dual/output/history/history_{fold_tag}.json"
-    csv_path    = f"experiments/dual/output/history/history_{fold_tag}.csv"
-    resume_path = f"experiments/dual/output/checkpoints/resume_{fold_tag}_latest.pth"
+    # save_path   = f"experiments/dual/output/checkpoints/best_{fold_tag}.pth"
+    # history_path= f"experiments/dual/output/history/history_{fold_tag}.json"
+    # csv_path    = f"experiments/dual/output/history/history_{fold_tag}.csv"
+    # resume_path = f"experiments/dual/output/checkpoints/resume_{fold_tag}_latest.pth"
+
+    save_path    = f"experiments/tiga/output/checkpoints/best_{fold_tag}.pth"
+    history_path = f"experiments/tiga/output/history/history_{fold_tag}.json"
+    csv_path     = f"experiments/tiga/output/history/history_{fold_tag}.csv"
+    resume_path  = f"experiments/tiga/output/checkpoints/resume_{fold_tag}_latest.pth"
 
     os.makedirs(os.path.dirname(save_path),    exist_ok=True)
     os.makedirs(os.path.dirname(history_path), exist_ok=True)
@@ -217,7 +224,8 @@ def main(args):
     # AUTO-DETECT LATEST RESUME FOLD
     # ==========================================
 
-    checkpoint_dir = "experiments/dual/output/checkpoints"
+    # checkpoint_dir = "experiments/dual/output/checkpoints"
+    checkpoint_dir = "experiments/tiga/output/checkpoints"
 
     latest_fold = 0
 
