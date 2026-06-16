@@ -2,7 +2,6 @@ import os
 import nibabel as nib
 import numpy as np
 import matplotlib.pyplot as plt
-
 from scipy.stats import gaussian_kde
 
 from src.dataset.preprocessing import (
@@ -15,10 +14,14 @@ from src.dataset.preprocessing import (
 # CONFIG
 # ==========================================
 
-CASE_DIR = r"data/raw/ASNR-MICCAI-BraTS2023-GLI-Challenge-TrainingData/BraTS-GLI-00000-000"
+CASE_DIR = (
+    "data/raw/"
+    "ASNR-MICCAI-BraTS2023-GLI-Challenge-TrainingData/"
+    "BraTS-GLI-00000-000"
+)
 
 # ==========================================
-# LOAD FILES
+# LOAD MRI
 # ==========================================
 
 files = os.listdir(CASE_DIR)
@@ -29,33 +32,32 @@ t2_file    = next(f for f in files if "-t2w" in f.lower())
 flair_file = next(f for f in files if "-t2f" in f.lower())
 seg_file   = next(f for f in files if "-seg" in f.lower())
 
-# ==========================================
-# LOAD MRI
-# ==========================================
 
-t1 = np.transpose(
-    nib.load(os.path.join(CASE_DIR, t1_file)).get_fdata(),
-    (2,0,1)
+def load_vol(path):
+    return np.transpose(
+        nib.load(path).get_fdata(),
+        (2, 0, 1)
+    )
+
+
+t1 = load_vol(
+    os.path.join(CASE_DIR, t1_file)
 )
 
-t1ce = np.transpose(
-    nib.load(os.path.join(CASE_DIR, t1ce_file)).get_fdata(),
-    (2,0,1)
+t1ce = load_vol(
+    os.path.join(CASE_DIR, t1ce_file)
 )
 
-t2 = np.transpose(
-    nib.load(os.path.join(CASE_DIR, t2_file)).get_fdata(),
-    (2,0,1)
+t2 = load_vol(
+    os.path.join(CASE_DIR, t2_file)
 )
 
-flair = np.transpose(
-    nib.load(os.path.join(CASE_DIR, flair_file)).get_fdata(),
-    (2,0,1)
+flair = load_vol(
+    os.path.join(CASE_DIR, flair_file)
 )
 
-seg = np.transpose(
-    nib.load(os.path.join(CASE_DIR, seg_file)).get_fdata(),
-    (2,0,1)
+seg = load_vol(
+    os.path.join(CASE_DIR, seg_file)
 )
 
 # ==========================================
@@ -73,97 +75,138 @@ t1, t1ce, t2, flair, seg = crop_roi_t1(
 t1ce = resize_3d(t1ce)
 
 # ==========================================
-# NORMALIZATION
+# BEFORE / AFTER
 # ==========================================
 
-t1ce_norm = normalize(t1ce)
+before = t1ce.copy()
+
+after = normalize(t1ce)
 
 # ==========================================
-# STATISTICS (FULL VOLUME)
+# BRAIN MASK
 # ==========================================
 
-print("===== FULL VOLUME =====")
+brain_mask = before > 0
 
-print("\nBefore Normalization")
-print("Mean :", t1ce.mean())
-print("Std  :", t1ce.std())
-
-print("\nAfter Normalization")
-print("Mean :", t1ce_norm.mean())
-print("Std  :", t1ce_norm.std())
-print("Min  :", t1ce_norm.min())
-print("Max  :", t1ce_norm.max())
+brain_before = before[brain_mask]
+brain_after = after[brain_mask]
 
 # ==========================================
-# KDE (BRAIN VOXELS ONLY)
+# STATISTICS
 # ==========================================
 
-mask = t1ce > 0
+print("\n" + "=" * 60)
+print("FULL VOLUME BEFORE NORMALIZATION")
+print("=" * 60)
 
-before = t1ce[mask]
-after  = t1ce_norm[mask]
+print(f"Mean     : {before.mean():.6f}")
+print(f"Std      : {before.std():.6f}")
+print(f"Variance : {before.var():.6f}")
+print(f"Min      : {before.min():.6f}")
+print(f"Max      : {before.max():.6f}")
 
-# sampling biar KDE cepat
-N = 50000
+print("\n" + "=" * 60)
+print("FULL VOLUME AFTER NORMALIZATION")
+print("=" * 60)
 
-if len(before) > N:
-    before = np.random.choice(before, N, replace=False)
+print(f"Mean     : {after.mean():.12f}")
+print(f"Std      : {after.std():.12f}")
+print(f"Variance : {after.var():.12f}")
+print(f"Min      : {after.min():.6f}")
+print(f"Max      : {after.max():.6f}")
 
-if len(after) > N:
-    after = np.random.choice(after, N, replace=False)
+print("\n" + "=" * 60)
+print("BRAIN VOXELS ONLY AFTER NORMALIZATION")
+print("=" * 60)
 
-# KDE
-kde_before = gaussian_kde(before)
-kde_after  = gaussian_kde(after)
+print(f"Mean     : {brain_after.mean():.12f}")
+print(f"Std      : {brain_after.std():.12f}")
+print(f"Variance : {brain_after.var():.12f}")
+print(f"Min      : {brain_after.min():.6f}")
+print(f"Max      : {brain_after.max():.6f}")
 
-x_before = np.linspace(
-    np.percentile(before, 1),
-    np.percentile(before, 99),
-    1000
+# ==========================================
+# DISTRIBUTION CURVES
+# ==========================================
+
+fig, ax = plt.subplots(
+    1,
+    3,
+    figsize=(18, 5)
 )
 
-x_after = np.linspace(
-    np.percentile(after, 1),
-    np.percentile(after, 99),
-    1000
-)
+plots = [
+    (
+        before.flatten(),
+        "Before Normalization"
+    ),
+    (
+        after.flatten(),
+        "After Z-score (Full Volume)"
+    ),
+    (
+        brain_after,
+        "After Z-score (Brain Voxels Only)"
+    )
+]
 
-# ==========================================
-# PLOT
-# ==========================================
+for i, (data, title) in enumerate(plots):
 
-plt.figure(figsize=(12,5))
+    mean = data.mean()
+    var = data.var()
 
-# BEFORE
-plt.subplot(1,2,1)
+    hist, bins = np.histogram(
+        data,
+        bins=150,
+        density=True
+    )
 
-plt.plot(
-    x_before,
-    kde_before(x_before),
-    linewidth=3
-)
+    centers = (
+        bins[:-1] +
+        bins[1:]
+    ) / 2
 
-plt.title("Before Z-score Normalization")
-plt.xlabel("Intensity")
-plt.ylabel("Density")
+    # distribution curve
+    ax[i].plot(
+        centers,
+        hist,
+        linewidth=2,
+        label="Distribution"
+    )
 
-# AFTER
-plt.subplot(1,2,2)
+    # mean
+    ax[i].axvline(
+        mean,
+        linestyle="--",
+        linewidth=2,
+        label=f"Mean = {mean:.3f}"
+    )
 
-plt.plot(
-    x_after,
-    kde_after(x_after),
-    linewidth=3
-)
+    ax[i].set_title(
+        f"{title}\n"
+        f"Variance = {var:.3f}"
+    )
 
-plt.title("After Z-score Normalization")
-plt.xlabel("Normalized Intensity")
-plt.ylabel("Density")
+    ax[i].set_xlabel(
+        "Intensity"
+    )
+
+    ax[i].set_ylabel(
+        "Density"
+    )
+
+    ax[i].grid(
+        alpha=0.3
+    )
+
+    ax[i].legend(
+        fontsize=8
+    )
 
 plt.tight_layout()
 
 plt.savefig(
-    "zscore_normalization_curve.png",
+    "zscore_brain_analysis.png",
     dpi=300,
     bbox_inches="tight"
 )

@@ -35,6 +35,7 @@ def compute_metrics(pred_logits, target, smooth=1e-6):
     metrics = {}
 
     dsc_list = []
+    iou_list = []
     hd_list = []
     prec_list = []
     sens_list = []
@@ -51,6 +52,7 @@ def compute_metrics(pred_logits, target, smooth=1e-6):
         tn = ((1 - p) * (1 - t)).sum()
 
         dsc  = (2 * tp + smooth) / (2 * tp + fp + fn + smooth)
+        iou  = (tp + smooth) / (tp + fp + fn + smooth)
         prec = (tp + smooth) / (tp + fp + smooth)
         sens = (tp + smooth) / (tp + fn + smooth)
         spec = (tn + smooth) / (tn + fp + smooth)
@@ -65,6 +67,7 @@ def compute_metrics(pred_logits, target, smooth=1e-6):
         hd95 = float(np.mean(hd_vals))
 
         metrics[f"dsc_{name}"]  = dsc.item()
+        metrics[f"iou_{name}"]  = iou.item()
         metrics[f"hd95_{name}"] = hd95
         metrics[f"prec_{name}"] = prec.item()
         metrics[f"sens_{name}"] = sens.item()
@@ -72,6 +75,7 @@ def compute_metrics(pred_logits, target, smooth=1e-6):
         metrics[f"acc_{name}"]  = acc.item()
 
         dsc_list.append(dsc.item())
+        iou_list.append(iou.item())
         hd_list.append(hd95)
         prec_list.append(prec.item())
         sens_list.append(sens.item())
@@ -79,6 +83,7 @@ def compute_metrics(pred_logits, target, smooth=1e-6):
         acc_list.append(acc.item())
 
     metrics["dsc_mean"]  = sum(dsc_list) / 3
+    metrics["iou_mean"]  = sum(iou_list) / 3
     metrics["hd95_mean"] = sum(hd_list) / 3
     metrics["prec_mean"] = sum(prec_list) / 3
     metrics["sens_mean"] = sum(sens_list) / 3
