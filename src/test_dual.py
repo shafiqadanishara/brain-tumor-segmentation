@@ -3,11 +3,6 @@
 # Standardized to (C,D,H,W)
 # Reads test cases from data/folds/test.json
 # Save visuals + postprocess + nii.gz
-#
-# Supports testing multiple checkpoints (e.g. 3 folds) in a single run:
-#   --checkpoint can be a comma-separated list
-#   --modality can be a single value (applied to all checkpoints)
-#               or a comma-separated list matching --checkpoint 1:1
 # =========================
 
 import argparse
@@ -322,7 +317,7 @@ def save_full_comparison(path, pred, gt):
     H, W = pred.shape[2], pred.shape[3]
 
     def make_rgb(seg):
-
+        
         rgb = np.zeros((H, W, 3), dtype=np.float32)
         rgb[seg[0, z] > 0.5] = [0.0, 0.8, 0.0]   # WT green
         rgb[seg[1, z] > 0.5] = [1.0, 1.0, 0.0]   # TC yellow
@@ -406,264 +401,287 @@ def main(args):
         shuffle=False
     )
 
-    # ----------------------------------------
-    # Parse multi-model arguments
-    # --checkpoint accepts a comma-separated list (e.g. 3 folds).
-    # --modality can be ONE value (applied to every checkpoint)
-    # or a comma-separated list matching --checkpoint, one-to-one.
-    # ----------------------------------------
-    checkpoints = [c.strip() for c in args.checkpoint.split(",") if c.strip()]
-    modalities  = [m.strip() for m in args.modality.split(",") if m.strip()]
+    channels = MODALITY_CHANNELS[args.modality]
 
-    if len(modalities) == 1:
-        modalities = modalities * len(checkpoints)
+    model = UNet3D(
+        in_channels=len(channels),
+        out_channels=3
+    ).to(device)
 
-    if len(modalities) != len(checkpoints):
-        raise ValueError(
-            f"Got {len(checkpoints)} checkpoint(s) but {len(modalities)} modality value(s). "
-            "Pass a single --modality to apply to all checkpoints, "
-            "or a comma-separated list matching --checkpoint one-to-one."
-        )
+    model.load_state_dict(
+        torch.load(args.checkpoint, map_location=device)
+    )
 
-    for m in modalities:
-        if m not in MODALITY_CHANNELS:
-            raise ValueError(
-                f"Unknown modality '{m}'. Choices: {list(MODALITY_CHANNELS.keys())}"
-            )
+    model.eval()
 
-    overall_summary = []
+    fold_name = Path(args.checkpoint).stem
 
-    for modality, checkpoint in zip(modalities, checkpoints):
-
-        print(f"\n{'='*60}")
-        print(f"  TESTING  modality={modality}  checkpoint={checkpoint}")
-        print(f"{'='*60}")
-
-        channels = MODALITY_CHANNELS[modality]
-
-        model = UNet3D(
-            in_channels=len(channels),
-            out_channels=3
-        ).to(device)
-
-        model.load_state_dict(
-            torch.load(checkpoint, map_location=device)
-        )
-
-        model.eval()
-
-        fold_name = Path(checkpoint).stem
-
+    if args.modality == "t1ce_t2_flair":
         out_root = Path(
-            f"experiments/dual/output_test/{modality}/{fold_name}"
+            f"experiments/tiga/output_test/{args.modality}/{fold_name}"
+        )
+    else:
+        out_root = Path(
+            f"experiments/dual/output_test/{args.modality}/{fold_name}"
         )
 
-        out_root.mkdir(
-            parents=True,
-            exist_ok=True
-        )
+    out_root.mkdir(
+        parents=True,
+        exist_ok=True
+    )
 
-        rows = []
+    rows = []
 
-        with torch.no_grad():
+    channels = MODALITY_CHANNELS[args.modality]
 
-            for img, mask, meta in tqdm(loader, desc=fold_name):
+    with torch.no_grad():
 
-                img  = img.to(device)
-                mask = mask.to(device)
+        for img, mask, meta in tqdm(loader):
 
-                case = meta["case"][0]
+            img  = img.to(device)
+            mask = mask.to(device)
 
-                case_path = os.path.join(
-                    "data/raw/ASNR-MICCAI-BraTS2023-GLI-Challenge-TrainingData",
-                    case
-                )
+            case = meta["case"][0]
 
-                files = os.listdir(case_path)
-
-                def load_mod(keyword):
-
-                    f = [x for x in files if keyword in x][0]
-
-                    return np.transpose(
-                        nib.load(
-                            os.path.join(case_path, f)
-                        ).get_fdata(),
-                        (2, 0, 1)
-                    )
-
-                orig_t1    = load_mod("t1n")
-                orig_t1ce  = load_mod("t1c")
-                orig_t2    = load_mod("t2w")
-                orig_flair = load_mod("t2f")
-
-                affine = nib.load(
-                    os.path.join(
-                        case_path,
-                        [x for x in files if "t1n" in x][0]
-                    )
-                ).affine
-
-                # ==================================================
-                # 128³ preprocessed channels
-                # ==================================================
-
-                flair_128 = img[0, 3].cpu().numpy()
-                t1_128    = img[0, 0].cpu().numpy()
-                t1ce_128  = img[0, 1].cpu().numpy()
-                t2_128    = img[0, 2].cpu().numpy()
-
-                x = img[:, channels]
-
-                logits = model(x)
-
-                pred = (
-                    torch.sigmoid(logits) > 0.5
-                ).float()
-
-                metrics = compute_metrics(logits, mask)
-
-                metrics["case"] = case
-
-                rows.append(metrics)
-
-                pred_np = pred[0].cpu().numpy()
-                gt_np   = mask[0].cpu().numpy()
-
-                restored = restore_to_original(
-                    pred_np,
-                    orig_t1
-                )
-
-                gt_restored = restore_to_original(
-                    gt_np,
-                    orig_t1
-                )
-
-                case_dir = out_root / case
-
-                case_dir.mkdir(
-                    parents=True,
-                    exist_ok=True
-                )
-
-                # ==================================================
-                # 128³ VISUALS
-                # ==================================================
-
-                save_summary(
-                    case_dir / "summary_128.png",
-                    flair_128,
-                    t1_128,
-                    t1ce_128,
-                    t2_128,
-                    pred_np,
-                    gt_np
-                )
-
-                save_comparison(
-                    case_dir / "comparison_pred_gt_128.png",
-                    pred_np,
-                    gt_np
-                )
-
-                save_full_comparison(
-                    case_dir / "comparison_full_128.png",
-                    pred_np,
-                    gt_np
-                )
-
-                # ==================================================
-                # ORIGINAL SPACE VISUALS
-                # ==================================================
-
-                save_summary(
-                    case_dir / "summary_original.png",
-                    orig_flair,
-                    orig_t1,
-                    orig_t1ce,
-                    orig_t2,
-                    restored,
-                    gt_restored
-                )
-
-                save_comparison(
-                    case_dir / "comparison_pred_gt_original.png",
-                    restored,
-                    gt_restored
-                )
-
-                save_full_comparison(
-                    case_dir / "comparison_full_original.png",
-                    restored,
-                    gt_restored
-                )
-
-                # ==================================================
-                # RAW ARRAYS
-                # ==================================================
-
-                np.save(case_dir / "pred_full.npy", pred_np)
-
-                np.save(
-                    case_dir / "pred_full_original.npy",
-                    restored
-                )
-
-                # ==================================================
-                # NIFTI
-                # ==================================================
-
-                save_nifti(
-                    restored.transpose(1, 2, 3, 0),
-                    affine,
-                    case_dir / "pred_full_original.nii.gz"
-                )
-
-        # ==================================================
-        # METRICS (per model)
-        # ==================================================
-
-        df = pd.DataFrame(rows)
-
-        df.to_csv(
-            out_root / "metrics.csv",
-            index=False
-        )
-
-        mean_row = df.mean(numeric_only=True)
-
-        mean_row.to_csv(out_root / "metrics_mean.csv")
-
-        with open(out_root / "metrics.json", "w") as f:
-
-            json.dump(
-                df.to_dict(orient="records"),
-                f,
-                indent=2
+            case_path = os.path.join(
+                "data/raw/ASNR-MICCAI-BraTS2023-GLI-Challenge-TrainingData",
+                case
             )
 
-        print(f"\nResults saved to: {out_root}")
-        print(mean_row)
+            files = os.listdir(case_path)
 
-        summary_entry = mean_row.to_dict()
-        summary_entry["modality"]   = modality
-        summary_entry["checkpoint"] = fold_name
-        overall_summary.append(summary_entry)
+            def load_mod(keyword):
+
+                f = [x for x in files if keyword in x][0]
+
+                return np.transpose(
+                    nib.load(
+                        os.path.join(case_path, f)
+                    ).get_fdata(),
+                    (2, 0, 1)
+                )
+
+            orig_t1    = load_mod("t1n")
+            orig_t1ce  = load_mod("t1c")
+            orig_t2    = load_mod("t2w")
+            orig_flair = load_mod("t2f")
+
+            affine = nib.load(
+                os.path.join(
+                    case_path,
+                    [x for x in files if "t1n" in x][0]
+                )
+            ).affine
+
+            # ==================================================
+            # 128³ preprocessed channels
+            # ==================================================
+
+            flair_128 = img[0, 3].cpu().numpy()
+            t1_128    = img[0, 0].cpu().numpy()
+            t1ce_128  = img[0, 1].cpu().numpy()
+            t2_128    = img[0, 2].cpu().numpy()
+
+            x = img[:, channels]
+
+            logits = model(x)
+
+            pred = (
+                torch.sigmoid(logits) > 0.5
+            ).float()
+
+            metrics = compute_metrics(logits, mask)
+
+            metrics["case"] = case
+
+            rows.append(metrics)
+
+            pred_np = pred[0].cpu().numpy()
+            gt_np   = mask[0].cpu().numpy()
+
+            restored = restore_to_original(
+                pred_np,
+                orig_t1
+            )
+
+            gt_restored = restore_to_original(
+                gt_np,
+                orig_t1
+            )
+
+            case_dir = out_root / case
+
+            case_dir.mkdir(
+                parents=True,
+                exist_ok=True
+            )
+
+            # ==================================================
+            # 128³ VISUALS
+            # ==================================================
+
+            save_summary(
+                case_dir / "summary_128.png",
+                flair_128,
+                t1_128,
+                t1ce_128,
+                t2_128,
+                pred_np,
+                gt_np
+            )
+
+            save_comparison(
+                case_dir / "comparison_pred_gt_128.png",
+                pred_np,
+                gt_np
+            )
+
+            save_full_comparison(
+                case_dir / "comparison_full_128.png",
+                pred_np,
+                gt_np
+            )
+
+            # save_single_region(
+            #     case_dir / "seg_wt_128.png",
+            #     pred_np[0],
+            #     "Predicted WT",
+            #     "Greens"
+            # )
+
+            # save_single_region(
+            #     case_dir / "seg_tc_128.png",
+            #     pred_np[1],
+            #     "Predicted TC",
+            #     "Blues"
+            # )
+
+            # save_single_region(
+            #     case_dir / "seg_et_128.png",
+            #     pred_np[2],
+            #     "Predicted ET",
+            #     "Reds"
+            # )
+
+            # ==================================================
+            # ORIGINAL SPACE VISUALS
+            # ==================================================
+
+            save_summary(
+                case_dir / "summary_original.png",
+                orig_flair,
+                orig_t1,
+                orig_t1ce,
+                orig_t2,
+                restored,
+                gt_restored
+            )
+
+            save_comparison(
+                case_dir / "comparison_pred_gt_original.png",
+                restored,
+                gt_restored
+            )
+
+            save_full_comparison(
+                case_dir / "comparison_full_original.png",
+                restored,
+                gt_restored
+            )
+
+            # save_single_region(
+            #     case_dir / "seg_wt_original.png",
+            #     restored[0],
+            #     "Predicted WT (original)",
+            #     "Greens"
+            # )
+
+            # save_single_region(
+            #     case_dir / "seg_tc_original.png",
+            #     restored[1],
+            #     "Predicted TC (original)",
+            #     "Blues"
+            # )
+
+            # save_single_region(
+            #     case_dir / "seg_et_original.png",
+            #     restored[2],
+            #     "Predicted ET (original)",
+            #     "Reds"
+            # )
+
+            # ==================================================
+            # RAW ARRAYS
+            # ==================================================
+
+            np.save(case_dir / "pred_full.npy", pred_np)
+            # np.save(case_dir / "pred_wt.npy", pred_np[0])
+            # np.save(case_dir / "pred_tc.npy", pred_np[1])
+            # np.save(case_dir / "pred_et.npy", pred_np[2])
+
+            np.save(
+                case_dir / "pred_full_original.npy",
+                restored
+            )
+
+            # ==================================================
+            # NIFTI
+            # ==================================================
+
+            save_nifti(
+                restored.transpose(1, 2, 3, 0),
+                affine,
+                case_dir / "pred_full_original.nii.gz"
+            )
+
+            # save_nifti(
+            #     restored[0],
+            #     affine,
+            #     case_dir / "pred_wt_original.nii.gz"
+            # )
+
+            # save_nifti(
+            #     restored[1],
+            #     affine,
+            #     case_dir / "pred_tc_original.nii.gz"
+            # )
+
+            # save_nifti(
+            #     restored[2],
+            #     affine,
+            #     case_dir / "pred_et_original.nii.gz"
+            # )
 
     # ==================================================
-    # COMBINED SUMMARY ACROSS ALL TESTED MODELS
+    # METRICS
     # ==================================================
 
-    summary_df = pd.DataFrame(overall_summary)
+    df = pd.DataFrame(rows)
 
-    summary_path = Path("experiments/dual/output_test/summary_all_models.csv")
-    summary_path.parent.mkdir(parents=True, exist_ok=True)
+    df.to_csv(
+        out_root / "metrics.csv",
+        index=False
+    )
 
-    summary_df.to_csv(summary_path, index=False)
+    df.mean(
+        numeric_only=True
+    ).to_csv(
+        out_root / "metrics_mean.csv"
+    )
 
-    print(f"\nCombined summary saved to: {summary_path}")
-    print(summary_df)
+    with open(out_root / "metrics.json", "w") as f:
+
+        json.dump(
+            df.to_dict(orient="records"),
+            f,
+            indent=2
+        )
+
+    print(f"\nResults saved to: {out_root}")
+
+    print(
+        df.mean(numeric_only=True)
+    )
 
 
 if __name__ == "__main__":
@@ -673,20 +691,12 @@ if __name__ == "__main__":
     parser.add_argument(
         "--modality",
         required=True,
-        help=(
-            "Single modality applied to all checkpoints, "
-            "OR comma-separated list matching --checkpoint 1:1. "
-            f"Choices: {list(MODALITY_CHANNELS.keys())}"
-        )
+        choices=list(MODALITY_CHANNELS.keys())
     )
 
     parser.add_argument(
         "--checkpoint",
-        required=True,
-        help=(
-            "Single checkpoint path, OR comma-separated list "
-            "e.g. best_fold0.pth,best_fold1.pth,best_fold2.pth"
-        )
+        required=True
     )
 
     parser.add_argument(
