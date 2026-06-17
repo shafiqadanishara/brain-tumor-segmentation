@@ -330,7 +330,7 @@ class UPennDataset3D(Dataset):
         # SAME AS BRATS
         # ==========================================
 
-        t1, t1ce, t2, flair, seg = crop_roi_t1(
+        t1, t1ce, t2, flair, seg, crop_hw = crop_roi_t1(
             t1,
             t1ce,
             t2,
