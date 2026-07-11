@@ -90,7 +90,8 @@ def visualize(case_path):
         t1c_crop,
         t2_crop,
         flair_crop,
-        seg_crop
+        seg_crop,
+        bbox
     ) = crop_roi_t1(
         t1_raw,
         t1c_raw,
@@ -150,14 +151,18 @@ def visualize(case_path):
             f"Before : "
             f"min={before.min():.4f} "
             f"max={before.max():.4f} "
-            f"mean={before.mean():.4f}"
+            f"mean={before.mean():.4f} "
+            f"std={before.std():.4f} "
+            f"p99={np.percentile(before, 99):.4f}"
         )
 
         print(
             f"After  : "
             f"min={after.min():.4f} "
             f"max={after.max():.4f} "
-            f"mean={after.mean():.4f}"
+            f"mean={after.mean():.4f} "
+            f"std={after.std():.4f} "
+            f"p99={np.percentile(after, 99):.4f}"
         )
 
     # =====================================
@@ -183,9 +188,10 @@ def visualize(case_path):
 
     for i, img in enumerate(raw_imgs):
 
-        axes[0, i].imshow(
+        axes[0,i].imshow(
             img[d_raw],
-            cmap="gray"
+            cmap="gray",
+            origin="lower"
         )
 
         axes[0, i].set_title(
@@ -208,8 +214,9 @@ def visualize(case_path):
     for i, img in enumerate(crop_imgs):
 
         axes[1, i].imshow(
-            img[d_crop],
-            cmap="gray"
+            img[d_raw],
+            cmap="gray",
+            origin="lower"
         )
 
         axes[1, i].set_title(
@@ -233,7 +240,8 @@ def visualize(case_path):
 
         axes[2, i].imshow(
             img[d_resize],
-            cmap="gray"
+            cmap="gray",
+            origin="lower"
         )
 
         axes[2, i].set_title(
@@ -257,7 +265,8 @@ def visualize(case_path):
 
         axes[3, i].imshow(
             img[d_resize],
-            cmap="gray"
+            cmap="gray",
+            origin="lower"
         )
 
         axes[3, i].set_title(
@@ -272,7 +281,8 @@ def visualize(case_path):
 
     axes[4, 0].imshow(
         seg_raw[d_raw],
-        cmap="jet"
+        cmap="jet",
+        origin="lower"
     )
 
     axes[4, 0].set_title(
@@ -283,7 +293,8 @@ def visualize(case_path):
 
     axes[4, 1].imshow(
         seg_crop[d_crop],
-        cmap="jet"
+        cmap="jet",
+        origin="lower"
     )
 
     axes[4, 1].set_title(
@@ -294,7 +305,8 @@ def visualize(case_path):
 
     axes[4, 2].imshow(
         seg_resize[d_resize],
-        cmap="jet"
+        cmap="jet",
+        origin="lower"
     )
 
     axes[4, 2].set_title(
@@ -305,12 +317,14 @@ def visualize(case_path):
 
     axes[4, 3].imshow(
         t1_norm[d_resize],
-        cmap="gray"
+        cmap="gray",
+        origin="lower"
     )
 
     axes[4, 3].imshow(
         seg_resize[d_resize],
         cmap="jet",
+        origin="lower",
         alpha=0.4
     )
 
@@ -323,13 +337,28 @@ def visualize(case_path):
     plt.tight_layout()
     plt.show()
 
+    files = os.listdir(case_path)
+
+    t1_file = [f for f in files if "t1n" in f.lower()][0]
+
+    nii = nib.load(
+        os.path.join(case_path, t1_file)
+    )
+
+    print("Affine")
+    print(nii.affine)
+
+    print("Orientation")
+    print(nib.aff2axcodes(nii.affine))
+    
 
 if __name__ == "__main__":
 
     case = (
-        # "data/split/train/"
-        # "BraTS-GLI-00000-000"
-        "data_upenn/UPENN-GBM-00020_11"
+        "data/split/train/"
+        "BraTS-GLI-00000-000"
+        #"data_upenn/UPENN-GBM-00020_11"
     )
 
     visualize(case)
+

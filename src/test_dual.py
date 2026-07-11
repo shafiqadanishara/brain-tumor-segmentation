@@ -1,8 +1,9 @@
 # =========================
-# test_dual.py
-# Standardized to (C,D,H,W)
-# Reads test cases from data/folds/test.json
-# Save visuals + postprocess + nii.gz
+# test_dual.py — FIXED (disamakan dengan test_ensemble.py)
+# Perubahan dari versi sebelumnya:
+# 1. bbox dari meta dipakai saat restore_to_original
+# 2. save_nifti dipanggil dengan (3,D,H,W) langsung, bukan transpose (D,H,W,3)
+# 3. Tambah save_nifti_multichannel untuk per-region NIfTI
 # =========================
 
 import argparse
@@ -20,7 +21,11 @@ import os
 from src.dataset.dataset3D import BraTSDataset3D
 from src.models.unet import UNet3D
 from src.utils.metrics import compute_metrics
-from src.dataset.postprocess import restore_to_original, save_nifti
+from src.dataset.postprocess import (
+    restore_to_original,
+    save_nifti,
+    save_nifti_multichannel
+)
 
 
 MODALITY_CHANNELS = {
@@ -317,7 +322,7 @@ def save_full_comparison(path, pred, gt):
     H, W = pred.shape[2], pred.shape[3]
 
     def make_rgb(seg):
-        
+
         rgb = np.zeros((H, W, 3), dtype=np.float32)
         rgb[seg[0, z] > 0.5] = [0.0, 0.8, 0.0]   # WT green
         rgb[seg[1, z] > 0.5] = [1.0, 1.0, 0.0]   # TC yellow
@@ -499,14 +504,19 @@ def main(args):
             pred_np = pred[0].cpu().numpy()
             gt_np   = mask[0].cpu().numpy()
 
+            # ---- FIXED: pakai bbox dari meta ----
+            bbox = meta["bbox"][0].numpy()  # [d0, d1, h0, h1, w0, w1]
+
             restored = restore_to_original(
                 pred_np,
-                orig_t1
+                orig_t1,
+                bbox=bbox
             )
 
             gt_restored = restore_to_original(
                 gt_np,
-                orig_t1
+                orig_t1,
+                bbox=bbox
             )
 
             case_dir = out_root / case
@@ -542,27 +552,6 @@ def main(args):
                 gt_np
             )
 
-            # save_single_region(
-            #     case_dir / "seg_wt_128.png",
-            #     pred_np[0],
-            #     "Predicted WT",
-            #     "Greens"
-            # )
-
-            # save_single_region(
-            #     case_dir / "seg_tc_128.png",
-            #     pred_np[1],
-            #     "Predicted TC",
-            #     "Blues"
-            # )
-
-            # save_single_region(
-            #     case_dir / "seg_et_128.png",
-            #     pred_np[2],
-            #     "Predicted ET",
-            #     "Reds"
-            # )
-
             # ==================================================
             # ORIGINAL SPACE VISUALS
             # ==================================================
@@ -589,35 +578,11 @@ def main(args):
                 gt_restored
             )
 
-            # save_single_region(
-            #     case_dir / "seg_wt_original.png",
-            #     restored[0],
-            #     "Predicted WT (original)",
-            #     "Greens"
-            # )
-
-            # save_single_region(
-            #     case_dir / "seg_tc_original.png",
-            #     restored[1],
-            #     "Predicted TC (original)",
-            #     "Blues"
-            # )
-
-            # save_single_region(
-            #     case_dir / "seg_et_original.png",
-            #     restored[2],
-            #     "Predicted ET (original)",
-            #     "Reds"
-            # )
-
             # ==================================================
             # RAW ARRAYS
             # ==================================================
 
             np.save(case_dir / "pred_full.npy", pred_np)
-            # np.save(case_dir / "pred_wt.npy", pred_np[0])
-            # np.save(case_dir / "pred_tc.npy", pred_np[1])
-            # np.save(case_dir / "pred_et.npy", pred_np[2])
 
             np.save(
                 case_dir / "pred_full_original.npy",
@@ -625,32 +590,22 @@ def main(args):
             )
 
             # ==================================================
-            # NIFTI
+            # NIFTI — FIXED: (3,D,H,W) langsung, bukan transpose
             # ==================================================
 
+            # Label map untuk 3D Slicer (single channel, nilai 0/1/2/3)
             save_nifti(
-                restored.transpose(1, 2, 3, 0),
+                restored,           # (3,D,H,W) → otomatis di-convert ke label map
                 affine,
                 case_dir / "pred_full_original.nii.gz"
             )
 
-            # save_nifti(
-            #     restored[0],
-            #     affine,
-            #     case_dir / "pred_wt_original.nii.gz"
-            # )
-
-            # save_nifti(
-            #     restored[1],
-            #     affine,
-            #     case_dir / "pred_tc_original.nii.gz"
-            # )
-
-            # save_nifti(
-            #     restored[2],
-            #     affine,
-            #     case_dir / "pred_et_original.nii.gz"
-            # )
+            # Opsional: simpan per-channel untuk visualisasi terpisah
+            save_nifti_multichannel(
+                restored,
+                affine,
+                case_dir / "pred_full_original_channel.nii.gz"
+            )
 
     # ==================================================
     # METRICS

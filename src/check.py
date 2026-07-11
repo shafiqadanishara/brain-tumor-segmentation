@@ -148,15 +148,17 @@ def get_stats(cases, n=N_SAMPLE):
 
 
 # ---- Collect stats per fold ----
+# ---- Collect stats per fold ----
 print(f"Sampling {N_SAMPLE} cases per split per fold...")
 fold_stats = []
 for fold in folds:
-    print(f"\n=== Fold {fold['fold']} ===")
+    fold_num = fold["fold"] + 1   # ubah di sini: index mulai dari 1
+    print(f"\n=== Fold {fold_num} ===")
     print(f"  Train ({len(fold['train'])} cases, sampling {min(N_SAMPLE, len(fold['train']))})")
     train_stats = get_stats(fold["train"])
     print(f"  Val   ({len(fold['val'])} cases, sampling {min(N_SAMPLE, len(fold['val']))})")
     val_stats   = get_stats(fold["val"])
-    fold_stats.append((fold["fold"], train_stats, val_stats))
+    fold_stats.append((fold_num, train_stats, val_stats))   # simpan fold_num, bukan fold["fold"]
 
     # Print summary
     for split_name, stats in [("Train", train_stats), ("Val", val_stats)]:
@@ -165,7 +167,6 @@ for fold in folds:
         print(f"    TC  volume: mean={stats['tc_vols'].mean():.0f}  std={stats['tc_vols'].std():.0f}")
         print(f"    ET  volume: mean={stats['et_vols'].mean():.0f}  std={stats['et_vols'].std():.0f}")
         print(f"    Imbalance : {stats['imbalance'].mean():.2f}% tumor voxels")
-
 
 # ==============================
 # PLOT

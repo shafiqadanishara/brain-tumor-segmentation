@@ -83,7 +83,7 @@ def visualize_preprocessing(case_path):
     t1, t1ce, t2, flair = load_raw_case(case_path)
 
     # CROP
-    t1_c, t1ce_c, t2_c, flair_c, _ = crop_roi_t1(
+    t1_c, t1ce_c, t2_c, flair_c, _, bbox = crop_roi_t1(
         t1, t1ce, t2, flair, np.zeros_like(t1)
     )
 

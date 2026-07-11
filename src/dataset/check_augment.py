@@ -62,7 +62,7 @@ seg = np.transpose(
 # SAME PREPROCESS AS TRAINING
 # =====================================================
 
-t1, t1ce, t2, flair, seg = crop_roi_t1(
+t1, t1ce, t2, flair, seg, _ = crop_roi_t1(
     t1,
     t1ce,
     t2,
@@ -229,7 +229,8 @@ for i in range(6):
 
     axes[0, i].imshow(
         images[i],
-        cmap="gray"
+        cmap="gray",
+        origin="lower"
     )
 
     axes[0, i].set_title(
@@ -242,6 +243,7 @@ for i in range(6):
     axes[1, i].imshow(
         masks[i],
         cmap="jet",
+        origin="lower",
         vmin=0,
         vmax=3
     )

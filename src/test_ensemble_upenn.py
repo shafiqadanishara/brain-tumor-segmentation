@@ -1,8 +1,14 @@
 # =========================
-# test_ensemble_upenn.py
+# test_ensemble_upenn.py — FIXED (disamakan dengan test_ensemble.py)
 # Cross-dataset testing on UPenn-GBM
 # Uses model trained on BraTS 2023
 # Standardized to (C,D,H,W)
+#
+# Perubahan dari versi sebelumnya:
+# 1. bbox dari meta dipakai saat restore_to_original
+#    (UPennDataset3D sudah menyediakan meta["bbox"])
+# 2. save_nifti dipanggil dengan (3,D,H,W) langsung, bukan transpose (D,H,W,3)
+# 3. Tambah save_nifti_multichannel untuk per-region NIfTI
 # =========================
 
 import argparse
@@ -21,7 +27,11 @@ from src.models.unet import UNet3D
 from src.models.dual_ensemble import DualEnsemble
 from src.dataset.dataset_upenn import UPennDataset3D
 from src.utils.metrics import compute_metrics
-from src.dataset.postprocess import restore_to_original, save_nifti
+from src.dataset.postprocess import (
+    restore_to_original,
+    save_nifti,
+    save_nifti_multichannel
+)
 
 
 # --------------------------------------------------
@@ -241,10 +251,14 @@ def main(args):
 
             # ==================================================
             # RESTORE TO ORIGINAL SPACE
+            # FIXED: pakai bbox dari meta (UPennDataset3D sudah
+            # menyediakan meta["bbox"], sama seperti BraTSDataset3D)
             # ==================================================
 
-            restored    = restore_to_original(pred_np, orig_t1)
-            gt_restored = restore_to_original(gt_np,   orig_t1)
+            bbox = meta["bbox"][0].numpy()  # [d0, d1, h0, h1, w0, w1]
+
+            restored    = restore_to_original(pred_np, orig_t1, bbox=bbox)
+            gt_restored = restore_to_original(gt_np,   orig_t1, bbox=bbox)
 
             case_out = out_root / case
             case_out.mkdir(parents=True, exist_ok=True)
@@ -275,15 +289,24 @@ def main(args):
 
             # ==================================================
             # SAVE ARRAYS + NIfTI
+            # FIXED: (3,D,H,W) langsung, bukan transpose (D,H,W,3)
             # ==================================================
 
             np.save(case_out / "pred_full.npy",          pred_np)
             np.save(case_out / "pred_full_original.npy", restored)
 
+            # Label map untuk 3D Slicer (single channel, nilai 0/1/2/3)
             save_nifti(
-                restored.transpose(1, 2, 3, 0),
+                restored,           # (3,D,H,W) → otomatis di-convert ke label map
                 affine,
                 case_out / "pred_full_original.nii.gz"
+            )
+
+            # Opsional: simpan per-channel untuk visualisasi terpisah
+            save_nifti_multichannel(
+                restored,
+                affine,
+                case_out / "pred_full_original_channel.nii.gz"
             )
 
     # ==================================================
